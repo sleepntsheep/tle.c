@@ -1,10 +1,12 @@
 #include "common.h"
 #include <sys/wait.h>
+#include <dirent.h>
 
 /* prototypes */
 int grade(unsigned, const char *, unsigned *, unsigned *, double *, char **, char **);
 void cleanup(int);
 int safe_tkcmp(const char *, const char *);
+int copy(char *, char *);
 
 static int
 write_submission_source(const char *box_path, const char *code)
@@ -630,6 +632,44 @@ int copy(char *source, char *dest)
   return 0;
 }
 
+static int
+copy_task_files(const char *task_path, const char *box_path)
+{
+  char source_dir[1200], target_dir[600], source[1500], target[900];
+  DIR *dir;
+  struct dirent *ent;
+  struct stat file_stat;
+
+  snprintf(source_dir, sizeof source_dir, "%s/files", task_path);
+  if (access(source_dir, R_OK | X_OK) != 0)
+    return 0;
+  snprintf(target_dir, sizeof target_dir, "%s/files", box_path);
+  if (mkdir(target_dir, 0700) != 0 && errno != EEXIST)
+    return -1;
+  dir = opendir(source_dir);
+  if (!dir)
+    return -1;
+  while ((ent = readdir(dir)) != NULL)
+  {
+    if (ent->d_name[0] == '.' || strchr(ent->d_name, '/') || strchr(ent->d_name, '\\'))
+      continue;
+    snprintf(source, sizeof source, "%s/%s", source_dir, ent->d_name);
+    snprintf(target, sizeof target, "%s/%s", target_dir, ent->d_name);
+    if (stat(source, &file_stat) != 0 || !S_ISREG(file_stat.st_mode))
+    {
+      closedir(dir);
+      return -1;
+    }
+    if (copy(source, target) != 0)
+    {
+      closedir(dir);
+      return -1;
+    }
+  }
+  closedir(dir);
+  return 0;
+}
+
   int
 grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_used,
     double *score, char **result, char **compiler_output)
@@ -658,6 +698,11 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
     return -1;
   }
   strcat(box_path, "/box");
+  if (copy_task_files(task_path, box_path) != 0)
+  {
+    warn("failed copying task files for %s", task.name);
+    return -1;
+  }
 
   {
     int custom_result = run_task_script(task_path, box_path, code, &task,

@@ -58,6 +58,10 @@ An executable `script/score` can replace the final score calculation. It
 receives `PASSED_CASES`, `CASE_COUNT`, `MAX_SCORE`, `LAST_RESULT`, and
 `RESULT_FILE`, and must write `score=<number>` to `RESULT_FILE`.
 
+Every regular file under `files/` is copied to `WORK_DIR/files/` before the
+task stages run. These are trusted task assets such as headers, stubs, grader
+sources, or libraries for multi-file compilation.
+
 This provides a stable extension point for multi-file, output-only,
 communication, and interactive tasks while ordinary tasks continue using the
 built-in evaluator. Task scripts are trusted grading code and must never be
