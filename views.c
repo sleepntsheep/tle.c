@@ -46,8 +46,8 @@ view_task_list(sds out, const char *username,
     const struct task_list_item *items, size_t count)
 {
   out = begin(out, username, "tasks");
-  out = sdscat(out, "<p>Solved tasks: <a href=\"?page=tasks\">show</a> "
-                    "<a href=\"?page=tasks&amp;show_solved=0\">hide</a></p>");
+  out = sdscat(out, "<p class=\"actions\">Solved tasks: <a class=\"button\" href=\"?page=tasks\">show</a> "
+                    "<a class=\"button\" href=\"?page=tasks&amp;show_solved=0\">hide</a></p>");
   out = task_list_table(out, items, count);
   return end(out);
 }
@@ -84,10 +84,10 @@ view_submission_list(sds out, const char *username,
         rows[i].score,
         rows[i].time_used, rows[i].memory_used);
   }
-  out = sdscat(out, "</tbody></table><p>Show ");
-  out = sdscat(out, "<a href=\"?page=submissions&amp;count=20\">20</a> ");
-  out = sdscat(out, "<a href=\"?page=submissions&amp;count=50\">50</a> ");
-  out = sdscat(out, "<a href=\"?page=submissions&amp;count=100\">100</a> lines</p>");
+  out = sdscat(out, "</tbody></table><p class=\"actions\">Show ");
+  out = sdscat(out, "<a class=\"button\" href=\"?page=submissions&amp;count=20\">20</a> ");
+  out = sdscat(out, "<a class=\"button\" href=\"?page=submissions&amp;count=50\">50</a> ");
+  out = sdscat(out, "<a class=\"button\" href=\"?page=submissions&amp;count=100\">100</a> lines</p>");
   if (count)
     out = sdscatprintf(out, "<a href=\"?page=submissions&amp;from=%u\">Previous page</a>", last_id);
   return end(out);
@@ -120,7 +120,7 @@ view_submission_detail(sds out, const char *username,
   out = sdscat(out, "</dd></dl>");
 
   if (submission->is_public)
-    out = sdscatprintf(out, "<p><a href=\"?page=view_code&amp;id=%u\">View submitted code</a></p>",
+    out = sdscatprintf(out, "<p class=\"actions\"><a class=\"button\" href=\"?page=view_code&amp;id=%u\">View submitted code</a></p>",
         submission->submission_id);
   out = sdscatprintf(out,
       "<form action=\"?page=admin\" method=\"post\"><input type=\"hidden\" name=\"rejudge\" value=\"%u\"><button type=\"submit\">Admin rejudge</button></form>",
@@ -159,8 +159,8 @@ view_task(sds out, const char *username, const struct task *task)
   out = sdscat(out, "</h1><p>"); out = html_escape_text(out, task->name);
   out = sdscatprintf(out, " (%u kilobytes, %u milliseconds)</p>"
       "<p>Submissions: %u · Accepted: %u</p>"
-      "<p><a href=\"?page=submit&amp;pk=%u\">Submit code</a> "
-      "<a href=\"?page=desc&amp;pk=%u\">Task statement</a></p>",
+      "<p class=\"actions\"><a class=\"button\" href=\"?page=submit&amp;pk=%u\">Submit code</a> "
+      "<a class=\"button\" href=\"?page=desc&amp;pk=%u\">Task statement</a></p>",
       task->memory_limit, task->time_limit, task->submission_count,
       task->accepted_count, task->pk, task->pk);
   if (task->sample_input[0] || task->sample_output[0])
