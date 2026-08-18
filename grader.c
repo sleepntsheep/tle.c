@@ -694,11 +694,18 @@ grade(unsigned submission_id, unsigned task_pk, const char *code, unsigned *time
 
   static struct task task;
   char task_path[9999], box_path[256];
+  char resolved_task_path[PATH_MAX];
 
   if (0 != fetch_task_by_pk(task_pk, &task))
     return -1;
 
   snprintf(task_path, sizeof(task_path), "%s/%s", TASKS_PATH, task.name);
+  if (!realpath(task_path, resolved_task_path))
+  {
+    warn("task path %s is not accessible: %s", task_path, strerror(errno));
+    return -1;
+  }
+  snprintf(task_path, sizeof(task_path), "%s", resolved_task_path);
 
   {
     char artifact_dir[600];
