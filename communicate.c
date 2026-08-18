@@ -17,6 +17,36 @@ kill_if_running(pid_t pid)
     kill(pid, SIGKILL);
 }
 
+static int
+isolate_setup(void)
+{
+  FILE *pipe = popen(ISOLATE_PATH " --init", "r");
+  char box[256];
+  int status;
+  if (!pipe)
+    return -1;
+  if (!fgets(box, sizeof box, pipe))
+  {
+    pclose(pipe);
+    return -1;
+  }
+  status = pclose(pipe);
+  return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
+static void
+isolate_teardown(void)
+{
+  pid_t pid = fork();
+  if (pid == 0)
+  {
+    execl(ISOLATE_PATH, "isolate", "--cleanup", NULL);
+    _exit(127);
+  }
+  if (pid > 0)
+    waitpid(pid, NULL, 0);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -39,8 +69,13 @@ main(int argc, char **argv)
   if (time_ms == 0 || memory_kb == 0 ||
       strlen(argv[1]) >= sizeof bind_arg || strlen(argv[2]) >= PATH_MAX)
     return 2;
-  if (pipe(pipes[0]) != 0 || pipe(pipes[1]) != 0)
+  if (isolate_setup() != 0)
     return 2;
+  if (pipe(pipes[0]) != 0 || pipe(pipes[1]) != 0)
+  {
+    isolate_teardown();
+    return 2;
+  }
 
   snprintf(bind_arg, sizeof bind_arg, "--dir=/work=%s:rw", argv[1]);
   snprintf(time_arg, sizeof time_arg, "--time=%.3f", time_ms / 1000.0);
@@ -51,6 +86,7 @@ main(int argc, char **argv)
   if (manager < 0)
   {
     close_all(pipes);
+    isolate_teardown();
     return 2;
   }
   if (manager == 0)
@@ -68,6 +104,7 @@ main(int argc, char **argv)
     kill_if_running(manager);
     close_all(pipes);
     waitpid(manager, NULL, 0);
+    isolate_teardown();
     return 2;
   }
   if (contestant == 0)
@@ -94,6 +131,7 @@ main(int argc, char **argv)
       kill_if_running(contestant);
       waitpid(manager, NULL, 0);
       waitpid(contestant, NULL, 0);
+      isolate_teardown();
       return 2;
     }
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -105,10 +143,13 @@ main(int argc, char **argv)
       kill_if_running(contestant);
       waitpid(manager, NULL, 0);
       waitpid(contestant, NULL, 0);
+      isolate_teardown();
       return 1;
     }
     usleep(10000);
   }
-  return WIFEXITED(manager_status) && WEXITSTATUS(manager_status) == 0 &&
+  int result = WIFEXITED(manager_status) && WEXITSTATUS(manager_status) == 0 &&
       WIFEXITED(contestant_status) && WEXITSTATUS(contestant_status) == 0 ? 0 : 1;
+  isolate_teardown();
+  return result;
 }
