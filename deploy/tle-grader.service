@@ -1,0 +1,22 @@
+[Unit]
+Description=TLE judge grader worker
+After=network.target
+
+[Service]
+Type=simple
+User=ray
+Group=ray
+WorkingDirectory=/opt/selfhost/tle
+EnvironmentFile=/etc/tle/tle.env
+ExecStart=/opt/selfhost/tle/tle_grader
+Restart=on-failure
+RestartSec=3
+UMask=0007
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/selfhost/tle
+
+[Install]
+WantedBy=multi-user.target

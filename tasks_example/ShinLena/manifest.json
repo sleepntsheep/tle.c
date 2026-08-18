@@ -1,0 +1,9 @@
+{
+    "pk": 9,
+    "ncase": 1,
+    "time": 50,
+    "mem": 256000,
+    "desc": "desc.txt",
+    "cmp_type": "tkcmp"
+}
+

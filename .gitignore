@@ -1,0 +1,23 @@
+.git
+.clang-format
+
+# Keep the public README, but exclude other Markdown notes/docs.
+*.md
+!README.md
+
+# Local/editor state and Python bytecode.
+/.*/
+!/.gitignore
+__pycache__/
+*.py[cod]
+
+tle_grader
+tle_web
+libmicrohttpd/**
+config.h
+data.db
+tle.db
+tle.db-shm
+tle.db-wal
+tasks/**
+tle/

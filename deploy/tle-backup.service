@@ -1,0 +1,12 @@
+[Unit]
+Description=Backup TLE SQLite database
+
+[Service]
+Type=oneshot
+User=ray
+Group=ray
+WorkingDirectory=/opt/selfhost/tle
+EnvironmentFile=/etc/tle/tle.env
+ExecStartPre=/usr/bin/install -d -o ray -g ray -m 0700 /var/backups/tle
+ExecStart=/opt/selfhost/tle/backup.sh /opt/selfhost/tle/tle.db
+UMask=0077

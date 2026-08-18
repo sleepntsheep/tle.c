@@ -1,0 +1,25 @@
+[Unit]
+Description=TLE judge web server
+After=network.target
+
+[Service]
+Type=simple
+User=ray
+Group=ray
+WorkingDirectory=/opt/selfhost/tle
+EnvironmentFile=/etc/tle/tle.env
+Environment=TLE_BIND_ADDRESS=0.0.0.0
+Environment=TLE_TLS_CERT=
+Environment=TLE_TLS_KEY=
+ExecStart=/opt/selfhost/tle/tle_web
+Restart=on-failure
+RestartSec=3
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/selfhost/tle
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1 @@
+Print the string "ShinLena\n" 500 times.

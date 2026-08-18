@@ -1,0 +1,244 @@
+#include "views.h"
+#include "html.h"
+#include "common.h"
+
+static sds
+begin(sds out, const char *username, const char *title)
+{
+  return html_page_header(out, username, title);
+}
+
+static sds
+end(sds out)
+{
+  return html_page_footer(out);
+}
+
+static sds
+task_list_table(sds out, const struct task_list_item *items, size_t count)
+{
+  out = sdscat(out, "<table><thead><tr><th></th><th>ID</th><th>Name</th></tr></thead><tbody>");
+  for (size_t i = 0; i < count; ++i)
+  {
+    out = sdscatprintf(out, "<tr><td>%s</td><td>%u</td><td><a href=\"?page=task&amp;pk=%u\">",
+        items[i].solved ? "☑" : "", items[i].pk, items[i].pk);
+    out = html_escape_text(out, items[i].name);
+    out = sdscat(out, "</a></td></tr>");
+  }
+  out = sdscat(out, "</tbody></table>");
+  return out;
+}
+
+sds
+view_front_page(sds out, const char *username,
+    const struct task_list_item *items, size_t count)
+{
+  out = begin(out, username, "tle grader");
+  out = sdscat(out, "<h1>tle grader</h1>");
+  out = sdscat(out, FRONT_PAGE);
+  out = task_list_table(out, items, count);
+  out = sdscat(out, "<p><a href=\"?page=tasks\">All tasks &rarr;</a></p>");
+  return end(out);
+}
+
+sds
+view_task_list(sds out, const char *username,
+    const struct task_list_item *items, size_t count)
+{
+  out = begin(out, username, "tasks");
+  out = sdscat(out, "<p>Solved tasks: <a href=\"?page=tasks\">show</a> "
+                    "<a href=\"?page=tasks&amp;show_solved=0\">hide</a></p>");
+  out = task_list_table(out, items, count);
+  return end(out);
+}
+
+sds
+view_submission_list(sds out, const char *username,
+    const struct submission_row *rows, size_t count, unsigned last_id)
+{
+  out = begin(out, username, "submissions");
+  out = sdscat(out, "<form method=\"get\"><input type=\"hidden\" name=\"page\" value=\"submissions\">"
+      "<label>User <input name=\"user\"></label>"
+      "<label>Task <input name=\"task\" type=\"number\" min=\"1\"></label>"
+      "<label>Verdict <input name=\"verdict\"></label>"
+      "<label><input type=\"checkbox\" name=\"mine\"> My submissions</label>"
+      "<button type=\"submit\">Filter</button></form>");
+  out = sdscat(out, "<table><thead><tr><th>id</th><th>submission time</th>"
+                    "<th>username</th><th>task</th><th>verdict</th>"
+                    "<th>score</th><th>time used (ms)</th><th>memory used (kib)</th></tr></thead><tbody>");
+  for (size_t i = 0; i < count; ++i)
+  {
+    out = sdscatprintf(out, "<tr><td><a href=\"?page=submission&amp;id=%u\">%u</a></td>",
+          rows[i].submission_id, rows[i].submission_id);
+    out = sdscat(out, "<td>"); out = html_escape_text(out, rows[i].submission_time);
+    out = sdscat(out, "</td><td>"); out = html_escape_text(out, rows[i].username);
+    out = sdscat(out, "</td><td>"); out = html_escape_text(out, rows[i].task_name);
+    out = sdscat(out, "</td><td>"); out = html_escape_text(out, rows[i].verdict);
+    if (rows[i].verdict_message[0] && strcmp(rows[i].verdict_message, rows[i].verdict))
+    {
+      out = sdscat(out, "<small> ");
+      out = html_escape_text(out, rows[i].verdict_message);
+      out = sdscat(out, "</small>");
+    }
+    out = sdscatprintf(out, "</td><td>%.2f</td><td>%u</td><td>%u</td></tr>",
+        rows[i].score,
+        rows[i].time_used, rows[i].memory_used);
+  }
+  out = sdscat(out, "</tbody></table><p>Show ");
+  out = sdscat(out, "<a href=\"?page=submissions&amp;count=20\">20</a> ");
+  out = sdscat(out, "<a href=\"?page=submissions&amp;count=50\">50</a> ");
+  out = sdscat(out, "<a href=\"?page=submissions&amp;count=100\">100</a> lines</p>");
+  if (count)
+    out = sdscatprintf(out, "<a href=\"?page=submissions&amp;from=%u\">Previous page</a>", last_id);
+  return end(out);
+}
+
+sds
+view_submission_detail(sds out, const char *username,
+    const struct submission_detail *submission)
+{
+  out = begin(out, username, "submission detail");
+  out = sdscatprintf(out, "<h1>Submission %u</h1><dl>", submission->submission_id);
+  out = sdscat(out, "<dt>User</dt><dd>");
+  out = html_escape_text(out, submission->username);
+  out = sdscat(out, "</dd><dt>Task</dt><dd>");
+  out = html_escape_text(out, submission->task_name);
+  out = sdscat(out, "</dd><dt>Verdict</dt><dd>");
+  out = html_escape_text(out, submission->verdict);
+  if (submission->verdict_message[0] && strcmp(submission->verdict_message, submission->verdict))
+  {
+    out = sdscat(out, " — ");
+    out = html_escape_text(out, submission->verdict_message);
+  }
+  out = sdscatprintf(out, "</dd><dt>Score</dt><dd>%.2f</dd>"
+      "<dt>Time</dt><dd>%u ms</dd><dt>Memory</dt><dd>%u KiB</dd>",
+      submission->score, submission->time_used, submission->memory_used);
+  if (submission->failed_case >= 0)
+    out = sdscatprintf(out, "<dt>Failed case</dt><dd>%d</dd>", submission->failed_case);
+  out = sdscat(out, "<dt>Submitted</dt><dd>");
+  out = html_escape_text(out, submission->submission_time);
+  out = sdscat(out, "</dd></dl>");
+
+  if (submission->is_public)
+    out = sdscatprintf(out, "<p><a href=\"?page=view_code&amp;id=%u\">View submitted code</a></p>",
+        submission->submission_id);
+  out = sdscatprintf(out,
+      "<form action=\"?page=admin\" method=\"post\"><input type=\"hidden\" name=\"rejudge\" value=\"%u\"><button type=\"submit\">Admin rejudge</button></form>",
+      submission->submission_id);
+  if (submission->compiler_output[0])
+  {
+    out = sdscat(out, "<h2>Compiler output</h2><pre><code>");
+    out = html_escape_text(out, submission->compiler_output);
+    out = sdscat(out, "</code></pre>");
+  }
+  return end(out);
+}
+
+sds
+view_admin(sds out, const char *username,
+    const struct admin_task_item *items, size_t count)
+{
+  out = begin(out, username, "admin page");
+  out = sdscat(out, "<table><thead><tr><th>Visibility</th><th>ID</th><th>Name</th></tr></thead><tbody>");
+  for (size_t i = 0; i < count; ++i)
+  {
+    out = sdscatprintf(out, "<tr><td><form action=\"?page=admin\" method=\"post\"><input type=\"hidden\" name=\"toggle_hidden\" value=\"%u\"><button type=\"submit\">%s</button></form></td><td>%u</td><td><a href=\"?page=task&amp;pk=%u\">",
+        items[i].pk, items[i].hidden ? "unhide" : "hide", items[i].pk, items[i].pk);
+    out = html_escape_text(out, items[i].name);
+    out = sdscat(out, "</a></td></tr>");
+  }
+  out = sdscat(out, "</tbody></table>");
+  return end(out);
+}
+
+sds
+view_task(sds out, const char *username, const struct task *task)
+{
+  out = begin(out, username, "task");
+  out = sdscat(out, "<h1>Task "); out = sdscatprintf(out, "%u", task->pk);
+  out = sdscat(out, "</h1><p>"); out = html_escape_text(out, task->name);
+  out = sdscatprintf(out, " (%u kilobytes, %u milliseconds)</p>"
+      "<p>Submissions: %u · Accepted: %u</p>"
+      "<p><a href=\"?page=submit&amp;pk=%u\">Submit code</a> "
+      "<a href=\"?page=desc&amp;pk=%u\">Task statement</a></p>",
+      task->memory_limit, task->time_limit, task->submission_count,
+      task->accepted_count, task->pk, task->pk);
+  if (task->sample_input[0] || task->sample_output[0])
+  {
+    out = sdscat(out, "<h2>Sample test</h2><div><strong>Input</strong><pre>");
+    out = html_escape_text(out, task->sample_input);
+    out = sdscat(out, "</pre><strong>Output</strong><pre>");
+    out = html_escape_text(out, task->sample_output);
+    out = sdscat(out, "</pre></div>");
+  }
+  return end(out);
+}
+
+sds
+view_submit(sds out, const char *username, unsigned task_pk)
+{
+  out = begin(out, username, "submit");
+  out = sdscatprintf(out,
+      "<h1>Submit task %u</h1><p>The code must not be longer than %u bytes.</p>"
+      "<form action=\"?page=submit&amp;pk=%u\" method=\"post\" enctype=\"multipart/form-data\">"
+      "<input type=\"hidden\" name=\"task_pk\" value=\"%u\">"
+      "<label>Code file <input type=\"file\" name=\"file\" accept=\".c,.cpp\" required></label>"
+      "<label><input type=\"checkbox\" name=\"is_public\" checked> Make code public</label>"
+      "<label><input type=\"checkbox\" name=\"is_anonymous\"> Submit anonymously</label>"
+      "<button type=\"submit\">Upload</button></form>",
+      task_pk, MAX_CODE_BYTES, task_pk, task_pk);
+  return end(out);
+}
+
+sds
+view_register(sds out, const char *username)
+{
+  out = begin(out, username, "register");
+  out = sdscat(out, "<h1>Register</h1><p>Username and password must be less than 32 and 256 bytes.</p>"
+      "<form action=\"?page=register\" method=\"post\">"
+      "<label>Username <input type=\"text\" name=\"username\" required></label>"
+      "<label>Password <input type=\"password\" name=\"password\" required></label>"
+      "<button type=\"submit\">Register</button></form>");
+  return end(out);
+}
+
+sds
+view_login(sds out, const char *username)
+{
+  out = begin(out, username, "login");
+  out = sdscat(out, "<h1>Login</h1>"
+      "<form action=\"?page=login\" method=\"post\">"
+      "<label>Username <input type=\"text\" name=\"username\" required></label>"
+      "<label>Password <input type=\"password\" name=\"password\" required></label>"
+      "<button type=\"submit\">Login</button></form>");
+  return end(out);
+}
+
+sds
+view_leaderboard(sds out, const char *username,
+    const struct leaderboard_row *rows, size_t count)
+{
+  out = begin(out, username, "leaderboard");
+  out = sdscat(out, "<h1>Leaderboard</h1><table><thead><tr>"
+      "<th>Rank</th><th>User</th><th>Solved</th><th>Total score</th>"
+      "</tr></thead><tbody>");
+  for (size_t i = 0; i < count; ++i)
+  {
+    out = sdscatprintf(out, "<tr><td>%zu</td><td>", i + 1);
+    out = html_escape_text(out, rows[i].username);
+    out = sdscatprintf(out, "</td><td>%d</td><td>%.2f</td></tr>",
+        rows[i].solved, rows[i].total_score);
+  }
+  out = sdscat(out, "</tbody></table>");
+  return end(out);
+}
+
+sds
+view_code(sds out, const char *username, unsigned id, const char *code)
+{
+  out = begin(out, username, "submission code");
+  out = sdscatprintf(out, "<h1>Submission %u</h1><pre><code>", id);
+  out = html_escape_text(out, code);
+  out = sdscat(out, "</code></pre>");
+  return end(out);
+}
