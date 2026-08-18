@@ -16,20 +16,6 @@ copy_text(char *out, size_t out_size, const unsigned char *value)
   snprintf(out, out_size, "%s", value ? (const char *)value : "");
 }
 
-static void
-copy_manifest_tags(char *out, size_t out_size, const cJSON *tags)
-{
-  out[0] = 0;
-  if (!tags || !cJSON_IsArray(tags)) return;
-  const cJSON *tag;
-  cJSON_ArrayForEach(tag, tags)
-  {
-    if (!cJSON_IsString(tag) || !tag->valuestring || strchr(tag->valuestring, ',')) continue;
-    if (out[0]) strncat(out, ",", out_size - strlen(out) - 1);
-    strncat(out, tag->valuestring, out_size - strlen(out) - 1);
-  }
-}
-
 static int
 valid_description_name(const char *name)
 {
@@ -107,12 +93,11 @@ static void
 consider_task(const struct task *task)
 {
   const char *sql =
-    "INSERT INTO tasks(task_pk,name,desc_path,memory_limit,time_limit,max_score,count_cases,comparison,difficulty,tags,source,estimated_minutes) "
-    "VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12) ON CONFLICT(task_pk) DO UPDATE SET "
+    "INSERT INTO tasks(task_pk,name,desc_path,memory_limit,time_limit,max_score,count_cases,comparison) "
+    "VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(task_pk) DO UPDATE SET "
     "name=excluded.name, desc_path=excluded.desc_path, memory_limit=excluded.memory_limit, "
     "time_limit=excluded.time_limit, max_score=excluded.max_score, count_cases=excluded.count_cases, "
-    "comparison=excluded.comparison, difficulty=excluded.difficulty, tags=excluded.tags, "
-    "source=excluded.source, estimated_minutes=excluded.estimated_minutes";
+    "comparison=excluded.comparison";
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK)
     die("failed to prepare task %s: %s", task->name, sqlite3_errmsg(db));
@@ -124,10 +109,6 @@ consider_task(const struct task *task)
   sqlite3_bind_double(stmt, 6, task->max_score);
   sqlite3_bind_int(stmt, 7, (int)task->count_cases);
   sqlite3_bind_text(stmt, 8, task->comparison, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 9, task->difficulty, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 10, task->tags, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 11, task->source, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int(stmt, 12, (int)task->estimated_minutes);
   if (sqlite3_step(stmt) != SQLITE_DONE)
     die("failed to insert task %s: %s", task->name, sqlite3_errmsg(db));
   sqlite3_finalize(stmt);
@@ -151,7 +132,6 @@ read_tasks(void)
     int file_size;
     struct task task = { 0 };
     const cJSON *pk, *time, *memory, *desc, *max_score, *comparison, *count_cases;
-    const cJSON *difficulty, *tags, *source, *estimated_minutes;
     cJSON *task_json;
     char *file_content;
 
@@ -192,17 +172,10 @@ read_tasks(void)
     count_cases = cJSON_GetObjectItemCaseSensitive(task_json, "ncase");
     comparison = cJSON_GetObjectItemCaseSensitive(task_json, "cmp_type");
     max_score = cJSON_GetObjectItemCaseSensitive(task_json, "max_score");
-    difficulty = cJSON_GetObjectItemCaseSensitive(task_json, "difficulty");
-    tags = cJSON_GetObjectItemCaseSensitive(task_json, "tags");
-    source = cJSON_GetObjectItemCaseSensitive(task_json, "source");
-    estimated_minutes = cJSON_GetObjectItemCaseSensitive(task_json, "estimated_minutes");
     if (!pk || !cJSON_IsNumber(pk) || !time || !cJSON_IsNumber(time) ||
         !memory || !cJSON_IsNumber(memory) || !count_cases || !cJSON_IsNumber(count_cases) ||
         !comparison || !cJSON_IsString(comparison) || (desc && !cJSON_IsString(desc)) ||
-        (max_score && !cJSON_IsNumber(max_score)) ||
-        (difficulty && !cJSON_IsString(difficulty)) || (tags && !cJSON_IsArray(tags)) ||
-        (source && !cJSON_IsString(source)) ||
-        (estimated_minutes && !cJSON_IsNumber(estimated_minutes)))
+        (max_score && !cJSON_IsNumber(max_score)))
       die("invalid task manifest: %s", path);
 
     copy_text(task.name, sizeof task.name, (const unsigned char *)ent->d_name);
@@ -222,12 +195,6 @@ read_tasks(void)
     task.memory_limit = (unsigned)memory->valueint;
     task.count_cases = (unsigned)count_cases->valueint;
     task.max_score = max_score ? max_score->valuedouble : 100.0;
-    copy_text(task.difficulty, sizeof task.difficulty,
-        (const unsigned char *)(difficulty ? difficulty->valuestring : "unknown"));
-    copy_manifest_tags(task.tags, sizeof task.tags, tags);
-    copy_text(task.source, sizeof task.source,
-        (const unsigned char *)(source ? source->valuestring : ""));
-    task.estimated_minutes = estimated_minutes ? (unsigned)estimated_minutes->valueint : 0;
     {
       char asset_path[1024];
       if (strcmp(task.comparison, "special") == 0 &&
@@ -261,7 +228,6 @@ fetch_task_by_pk(unsigned pk, struct task *task_data)
 {
   const char *sql =
     "SELECT t.task_pk,t.name,t.memory_limit,t.time_limit,t.desc_path,t.count_cases,t.max_score,t.comparison,"
-    "t.difficulty,t.tags,t.source,t.estimated_minutes,"
     "(SELECT COUNT(*) FROM submissions s WHERE s.task_pk=t.task_pk),"
     "(SELECT COUNT(*) FROM submissions s WHERE s.task_pk=t.task_pk AND s.verdict='accepted') "
     "FROM tasks t WHERE t.task_pk=?1";
@@ -282,12 +248,8 @@ fetch_task_by_pk(unsigned pk, struct task *task_data)
   task_data->count_cases = (unsigned)sqlite3_column_int(stmt, 5);
   task_data->max_score = sqlite3_column_double(stmt, 6);
   copy_text(task_data->comparison, sizeof task_data->comparison, sqlite3_column_text(stmt, 7));
-  copy_text(task_data->difficulty, sizeof task_data->difficulty, sqlite3_column_text(stmt, 8));
-  copy_text(task_data->tags, sizeof task_data->tags, sqlite3_column_text(stmt, 9));
-  copy_text(task_data->source, sizeof task_data->source, sqlite3_column_text(stmt, 10));
-  task_data->estimated_minutes = (unsigned)sqlite3_column_int(stmt, 11);
-  task_data->submission_count = (unsigned)sqlite3_column_int(stmt, 12);
-  task_data->accepted_count = (unsigned)sqlite3_column_int(stmt, 13);
+  task_data->submission_count = (unsigned)sqlite3_column_int(stmt, 8);
+  task_data->accepted_count = (unsigned)sqlite3_column_int(stmt, 9);
   sqlite3_finalize(stmt);
   return 0;
 }
@@ -372,16 +334,15 @@ check_task_pk_validity(unsigned pk)
 int
 fetch_tasks(struct task_list_item **items, size_t *count, int user_id, const char *show_solved)
 {
-  return fetch_tasks_filtered(items, count, user_id, show_solved, NULL, NULL, NULL, NULL);
+  return fetch_tasks_filtered(items, count, user_id, show_solved, NULL, NULL);
 }
 
 int
 fetch_tasks_filtered(struct task_list_item **items, size_t *count, int user_id,
-    const char *show_solved, const char *query, const char *difficulty,
-    const char *tag, const char *state)
+    const char *show_solved, const char *query, const char *state)
 {
   sds sql = sdscat(sdsempty(),
-    "SELECT t.task_pk,t.name,t.difficulty,t.tags,t.source,t.estimated_minutes,"
+    "SELECT t.task_pk,t.name,"
     "EXISTS(SELECT 1 FROM submissions s WHERE s.task_pk=t.task_pk AND s.user_id=?1 AND (s.verdict='accepted' OR s.result LIKE 'accepted%')),"
     "EXISTS(SELECT 1 FROM submissions s WHERE s.task_pk=t.task_pk AND s.user_id=?1),"
     "EXISTS(SELECT 1 FROM bookmarks b WHERE b.task_pk=t.task_pk AND b.user_id=?1) "
@@ -390,8 +351,6 @@ fetch_tasks_filtered(struct task_list_item **items, size_t *count, int user_id,
   if (show_solved && !strcmp(show_solved, "0"))
     sql = sdscat(sql, " AND NOT EXISTS(SELECT 1 FROM submissions s WHERE s.task_pk=t.task_pk AND s.user_id=?1 AND (s.verdict='accepted' OR s.result LIKE 'accepted%'))");
   if (query && *query) sql = sdscatprintf(sql, " AND instr(lower(t.name),lower(?%d))>0", ++n);
-  if (difficulty && *difficulty) sql = sdscatprintf(sql, " AND t.difficulty=?%d", ++n);
-  if (tag && *tag) sql = sdscatprintf(sql, " AND instr(','||t.tags||',',','||?%d||',')>0", ++n);
   if (state && !strcmp(state, "solved")) sql = sdscat(sql, " AND EXISTS(SELECT 1 FROM submissions s WHERE s.task_pk=t.task_pk AND s.user_id=?1 AND (s.verdict='accepted' OR s.result LIKE 'accepted%'))");
   if (state && !strcmp(state, "tried")) sql = sdscat(sql, " AND EXISTS(SELECT 1 FROM submissions s WHERE s.task_pk=t.task_pk AND s.user_id=?1) AND NOT EXISTS(SELECT 1 FROM submissions s WHERE s.task_pk=t.task_pk AND s.user_id=?1 AND (s.verdict='accepted' OR s.result LIKE 'accepted%'))");
   if (state && !strcmp(state, "bookmarked")) sql = sdscat(sql, " AND EXISTS(SELECT 1 FROM bookmarks b WHERE b.task_pk=t.task_pk AND b.user_id=?1)");
@@ -402,8 +361,6 @@ fetch_tasks_filtered(struct task_list_item **items, size_t *count, int user_id,
   sqlite3_bind_int(stmt, 1, user_id);
   int p = 2;
   if (query && *query) sqlite3_bind_text(stmt, p++, query, -1, SQLITE_TRANSIENT);
-  if (difficulty && *difficulty) sqlite3_bind_text(stmt, p++, difficulty, -1, SQLITE_TRANSIENT);
-  if (tag && *tag) sqlite3_bind_text(stmt, p++, tag, -1, SQLITE_TRANSIENT);
   size_t capacity = 16;
   *items = calloc(capacity, sizeof **items);
   *count = 0;
@@ -417,13 +374,9 @@ fetch_tasks_filtered(struct task_list_item **items, size_t *count, int user_id,
     }
     (*items)[*count].pk = (unsigned)sqlite3_column_int(stmt, 0);
     copy_text((*items)[*count].name, sizeof ((*items)[*count].name), sqlite3_column_text(stmt, 1));
-    copy_text((*items)[*count].difficulty, sizeof ((*items)[*count].difficulty), sqlite3_column_text(stmt, 2));
-    copy_text((*items)[*count].tags, sizeof ((*items)[*count].tags), sqlite3_column_text(stmt, 3));
-    copy_text((*items)[*count].source, sizeof ((*items)[*count].source), sqlite3_column_text(stmt, 4));
-    (*items)[*count].estimated_minutes = (unsigned)sqlite3_column_int(stmt, 5);
-    (*items)[*count].solved = sqlite3_column_int(stmt, 6) != 0;
-    (*items)[*count].tried = sqlite3_column_int(stmt, 7) != 0;
-    (*items)[*count].bookmarked = sqlite3_column_int(stmt, 8) != 0;
+    (*items)[*count].solved = sqlite3_column_int(stmt, 2) != 0;
+    (*items)[*count].tried = sqlite3_column_int(stmt, 3) != 0;
+    (*items)[*count].bookmarked = sqlite3_column_int(stmt, 4) != 0;
     ++*count;
   }
   int rc = sqlite3_errcode(db);

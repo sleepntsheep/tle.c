@@ -52,6 +52,19 @@ ensure_column(const char *table, const char *column, const char *definition)
   exec_sql(sql);
 }
 
+static void
+drop_column_if_exists(const char *table, const char *column)
+{
+  const char *decl_type = NULL, *collation = NULL;
+  int not_null = 0, primary_key = 0, autoincrement = 0;
+  if (sqlite3_table_column_metadata(db, NULL, table, column, &decl_type,
+      &collation, &not_null, &primary_key, &autoincrement) != SQLITE_OK)
+    return;
+  char sql[256];
+  snprintf(sql, sizeof sql, "ALTER TABLE %s DROP COLUMN %s", table, column);
+  exec_sql(sql);
+}
+
 static int
 schema_version(void)
 {
@@ -100,8 +113,7 @@ db_init(void)
     "task_pk INTEGER PRIMARY KEY, name TEXT NOT NULL, desc_path TEXT NOT NULL,"
     "memory_limit INTEGER NOT NULL, time_limit INTEGER NOT NULL,"
     "max_score REAL NOT NULL, count_cases INTEGER NOT NULL, comparison TEXT NOT NULL,"
-    "is_hidden INTEGER NOT NULL DEFAULT 0, difficulty TEXT NOT NULL DEFAULT 'unknown',"
-    "tags TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', estimated_minutes INTEGER NOT NULL DEFAULT 0"
+    "is_hidden INTEGER NOT NULL DEFAULT 0"
     ");"
   );
   exec_sql(
@@ -137,15 +149,19 @@ db_init(void)
     ensure_column("sessions", "csrf_token", "TEXT");
     set_schema_version(3);
   }
-  ensure_column("tasks", "difficulty", "TEXT NOT NULL DEFAULT 'unknown'");
-  ensure_column("tasks", "tags", "TEXT NOT NULL DEFAULT ''");
-  ensure_column("tasks", "source", "TEXT NOT NULL DEFAULT ''");
-  ensure_column("tasks", "estimated_minutes", "INTEGER NOT NULL DEFAULT 0");
   exec_sql("CREATE TABLE IF NOT EXISTS bookmarks (user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE, task_pk INTEGER NOT NULL REFERENCES tasks(task_pk) ON DELETE CASCADE, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, task_pk));");
   if (version < 4)
   {
     set_schema_version(4);
     version = 4;
+  }
+  if (version < 5)
+  {
+    drop_column_if_exists("tasks", "difficulty");
+    drop_column_if_exists("tasks", "tags");
+    drop_column_if_exists("tasks", "source");
+    drop_column_if_exists("tasks", "estimated_minutes");
+    set_schema_version(5);
   }
   exec_sql(
     "CREATE TABLE IF NOT EXISTS grading_jobs ("

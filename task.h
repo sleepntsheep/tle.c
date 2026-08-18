@@ -9,10 +9,6 @@ struct task
   unsigned memory_limit;
   unsigned time_limit;
   char desc[1024];
-  char difficulty[32];
-  char tags[512];
-  char source[128];
-  unsigned estimated_minutes;
   char comparison[99];
   unsigned count_cases;
   double max_score;
@@ -29,10 +25,6 @@ struct task_list_item
   int solved;
   int tried;
   int bookmarked;
-  char difficulty[32];
-  char tags[512];
-  char source[128];
-  unsigned estimated_minutes;
 };
 
 struct submission_row
@@ -118,7 +110,7 @@ fetch_tasks(struct task_list_item **items, size_t *count,
 int
 fetch_tasks_filtered(struct task_list_item **items, size_t *count,
     int user_id, const char *show_solved, const char *query,
-    const char *difficulty, const char *tag, const char *state);
+    const char *state);
 
 int
 toggle_bookmark(int user_id, unsigned task_pk);

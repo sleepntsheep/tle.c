@@ -786,8 +786,6 @@ ahc_echo(void * cls,
     {
       const char *show_solved;
       const char *query = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "q");
-      const char *difficulty = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "difficulty");
-      const char *tag = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "tag");
       const char *state = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "state");
 
       if (auth_fail)
@@ -807,7 +805,7 @@ ahc_echo(void * cls,
       size_t item_count = 0;
       db_lock();
       int fetch_result = fetch_tasks_filtered(&items, &item_count, user_id, show_solved,
-          query, difficulty, tag, state);
+          query, state);
       db_unlock();
       if (fetch_result != 0)
         return response_internal_server_error(connection);
