@@ -172,7 +172,8 @@ view_task(sds out, const char *username, const struct task *task,
     out = sdscat(out, "<article class=\"statement\">");
     out = html_markdown(out, statement ? statement : "The statement is unavailable.");
     out = sdscat(out, "</article><script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js\"></script>"
-        "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\" onload=\"renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]})\"></script>");
+        "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\"></script>"
+        "<script>window.addEventListener('load',function(){if(typeof renderMathInElement==='function')renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]});});</script>");
   }
   if (task->sample_input[0])
   {
@@ -202,7 +203,8 @@ view_statement(sds out, const char *username, const struct task *task, const cha
   out = sdscat(out, "</h1><article class=\"statement\">");
   out = html_markdown(out, markdown);
   out = sdscat(out, "</article><script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js\"></script>"
-      "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\" onload=\"renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]})\"></script>");
+      "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\"></script>"
+      "<script>window.addEventListener('load',function(){if(typeof renderMathInElement==='function')renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]});});</script>");
   return end(out);
 }
 
