@@ -112,6 +112,7 @@ html_markdown(sds out, const char *text)
   int in_code = 0;
   int in_list = 0;
   int in_paragraph = 0;
+  int in_math_block = 0;
 
   while (*cursor)
   {
@@ -120,7 +121,26 @@ html_markdown(sds out, const char *text)
     sds line = sdsnewlen(cursor, length);
     while (line[sdslen(line)] == '\r') sdsIncrLen(line, -1);
 
-    if (!strcmp(line, "```") || !strncmp(line, "```", 3))
+    if (in_math_block)
+    {
+      out = markdown_inline(out, line);
+      out = sdscat(out, "\n");
+      if (!strcmp(line, "\\]") || !strcmp(line, "$$"))
+      {
+        out = sdscat(out, "</div>");
+        in_math_block = 0;
+      }
+    }
+    else if (!strcmp(line, "\\[") || !strcmp(line, "$$"))
+    {
+      if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
+      if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+      out = sdscat(out, "<div class=\"math-block\">");
+      out = markdown_inline(out, line);
+      out = sdscat(out, "\n");
+      in_math_block = 1;
+    }
+    else if (!strcmp(line, "```") || !strncmp(line, "```", 3))
     {
       if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
       if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
@@ -178,6 +198,7 @@ html_markdown(sds out, const char *text)
   if (in_paragraph) out = sdscat(out, "</p>");
   if (in_list) out = sdscat(out, "</ul>");
   if (in_code) out = sdscat(out, "</code></pre>");
+  if (in_math_block) out = sdscat(out, "</div>");
   return out;
 }
 
