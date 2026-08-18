@@ -152,17 +152,28 @@ view_admin(sds out, const char *username,
 }
 
 sds
-view_task(sds out, const char *username, const struct task *task)
+view_task(sds out, const char *username, const struct task *task,
+    const char *statement, int statement_pdf)
 {
   out = begin(out, username, "task");
   out = sdscat(out, "<h1>Task "); out = sdscatprintf(out, "%u", task->pk);
   out = sdscat(out, "</h1><p>"); out = html_escape_text(out, task->name);
+  out = sdscat(out, "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css\">");
   out = sdscatprintf(out, " (%u kilobytes, %u milliseconds)</p>"
       "<p>Submissions: %u · Accepted: %u</p>"
-      "<p class=\"actions\"><a class=\"button\" href=\"?page=submit&amp;pk=%u\">Submit code</a> "
-      "<a class=\"button\" href=\"?page=desc&amp;pk=%u\">Task statement</a></p>",
+      "<p class=\"actions\"><a class=\"button\" href=\"?page=submit&amp;pk=%u\">Submit code</a></p>",
       task->memory_limit, task->time_limit, task->submission_count,
-      task->accepted_count, task->pk, task->pk);
+      task->accepted_count, task->pk);
+  out = sdscat(out, "<h2>Statement</h2>");
+  if (statement_pdf)
+    out = sdscatprintf(out, "<iframe class=\"statement-frame\" title=\"Task statement\" src=\"?page=desc_file&amp;pk=%u\"></iframe>", task->pk);
+  else
+  {
+    out = sdscat(out, "<article class=\"statement\">");
+    out = html_markdown(out, statement ? statement : "The statement is unavailable.");
+    out = sdscat(out, "</article><script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js\"></script>"
+        "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\" onload=\"renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]})\"></script>");
+  }
   if (task->sample_input[0])
   {
     out = sdscat(out, "<h2>Sample test</h2><div><strong>Input</strong><pre>");

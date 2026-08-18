@@ -14,7 +14,8 @@ sds view_submission_detail(sds out, const char *username,
     const struct submission_detail *submission);
 sds view_admin(sds out, const char *username,
     const struct admin_task_item *items, size_t count);
-sds view_task(sds out, const char *username, const struct task *task);
+sds view_task(sds out, const char *username, const struct task *task,
+    const char *statement, int statement_pdf);
 sds view_statement(sds out, const char *username, const struct task *task, const char *markdown);
 sds view_pdf_statement(sds out, const char *username, const struct task *task);
 sds view_submit(sds out, const char *username, unsigned task_pk);

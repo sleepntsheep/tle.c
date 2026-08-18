@@ -736,7 +736,30 @@ ahc_echo(void * cls,
         return MHD_NO;
 
       load_sample_tests(&task);
-      html = view_task(sdsempty(), username, &task);
+      {
+        sds description = NULL;
+        int statement_pdf = !strcmp(strrchr(task.desc, '.') ? strrchr(task.desc, '.') : "", ".pdf");
+        sds path = sdscatprintf(sdsempty(), "./tasks/%s/%s", task.name, task.desc);
+        if (!task.desc[0] || strchr(task.desc, '/') || strchr(task.desc, '\\') ||
+            !strcmp(task.desc, ".") || !strcmp(task.desc, ".."))
+        {
+          sdsfree(path);
+          return response_not_found(connection);
+        }
+        if (!statement_pdf)
+        {
+          int description_size;
+          char *description_data = read_file_binary(path, &description_size);
+          if (description_data)
+          {
+            description = sdsnewlen(description_data, description_size);
+            free(description_data);
+          }
+        }
+        html = view_task(sdsempty(), username, &task, description, statement_pdf);
+        sdsfree(description);
+        sdsfree(path);
+      }
     }
     else if (0 == strcmp(page, "desc") || 0 == strcmp(page, "desc_file"))
     {
