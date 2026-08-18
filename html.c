@@ -142,6 +142,7 @@ html_page_header(sds out, const char *username, const char *title)
       "label{display:flex;flex-direction:column;gap:.25rem;font-size:.9rem}"
       "label:has(input[type=checkbox]){flex-direction:row;align-items:center;margin-bottom:.45rem}"
       "input,textarea,select{font:inherit;min-height:2.2rem;padding:.35rem .5rem;border:1px solid var(--ink);border-radius:0;background:var(--paper);color:var(--ink)}"
+      "textarea{resize:vertical;min-height:7rem;max-height:70vh}"
       "input[type=checkbox]{min-height:0;accent-color:var(--ink)}"
       "button{font:inherit;min-height:2.2rem;padding:.35rem .75rem;border:1px solid var(--ink);border-radius:0;background:var(--ink);color:var(--paper);cursor:pointer}"
       "pre{overflow:auto;padding:1rem;border:1px solid var(--line);background:var(--paper)}"

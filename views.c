@@ -224,15 +224,14 @@ view_submit(sds out, const char *username, unsigned task_pk, const char *csrf,
       "<h1>Submit task %u</h1><p>%s must not be longer than %u bytes.</p>"
       "<form action=\"?page=submit&amp;pk=%u\" method=\"post\" enctype=\"multipart/form-data\">"
       "<input type=\"hidden\" name=\"task_pk\" value=\"%u\"><input type=\"hidden\" name=\"csrf\" value=\"%s\">"
-      "<label>%s <textarea name=\"code\" rows=\"18\" cols=\"80\" placeholder=\"%s\"></textarea></label>"
+      "<label>%s <textarea name=\"code\" rows=\"5\" cols=\"80\"></textarea></label>"
       "<p class=\"hint\">Or choose a file instead. Use one submission method at a time.</p>"
       "<label>File <input type=\"file\" name=\"file\" accept=\".c,.cpp,.txt,.out\"></label>"
       "<label><input type=\"checkbox\" name=\"is_public\" checked> Make code public</label>"
       "<label><input type=\"checkbox\" name=\"is_anonymous\"> Submit anonymously</label>"
       "<button type=\"submit\">Upload</button></form>",
       task_pk, output_only ? "The output" : "The code", MAX_CODE_BYTES,
-      task_pk, task_pk, csrf ? csrf : "", output_only ? "Paste output" : "Paste code",
-      output_only ? "Paste the expected output here" : "Paste C or C++ code here");
+      task_pk, task_pk, csrf ? csrf : "", output_only ? "Paste output" : "Paste code");
   return end(out);
 }
 
