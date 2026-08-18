@@ -13,6 +13,7 @@ __pycache__/
 
 tle_grader
 tle_web
+tle_communicate
 libmicrohttpd/**
 config.h
 data.db
