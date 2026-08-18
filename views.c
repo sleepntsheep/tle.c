@@ -15,6 +15,21 @@ end(sds out)
 }
 
 static sds
+compact_submission_status(sds out, const struct submission_row *row)
+{
+  const char *code = "..";
+  if (!strcmp(row->verdict, "accepted")) code = "AC";
+  else if (!strcmp(row->verdict, "wrong_answer")) code = "WA";
+  else if (!strcmp(row->verdict, "compilation_error")) code = "CE";
+  else if (!strcmp(row->verdict, "time_limit")) code = "TL";
+  else if (!strcmp(row->verdict, "memory_limit")) code = "ML";
+  else if (!strcmp(row->verdict, "runtime_error")) code = "RE";
+  else if (!strcmp(row->verdict, "internal_error")) code = "IE";
+  return sdscatprintf(out, "[%s][P%03.0f][T%04u][X%04u]", code,
+      row->score, row->time_used, row->memory_used);
+}
+
+static sds
 task_list_table(sds out, const struct task_list_item *items, size_t count)
 {
   out = sdscat(out, "<table><thead><tr><th></th><th>ID</th><th>Name</th></tr></thead><tbody>");
@@ -85,13 +100,8 @@ view_submission_list(sds out, const char *username,
     out = sdscat(out, "<td>"); out = html_escape_text(out, rows[i].submission_time);
     out = sdscat(out, "</td><td>"); out = html_escape_text(out, rows[i].username);
     out = sdscat(out, "</td><td>"); out = html_escape_text(out, rows[i].task_name);
-    out = sdscat(out, "</td><td>"); out = html_escape_text(out, rows[i].verdict);
-    if (rows[i].verdict_message[0] && strcmp(rows[i].verdict_message, rows[i].verdict))
-    {
-      out = sdscat(out, "<small> ");
-      out = html_escape_text(out, rows[i].verdict_message);
-      out = sdscat(out, "</small>");
-    }
+    out = sdscat(out, "</td><td>");
+    out = compact_submission_status(out, &rows[i]);
     out = sdscatprintf(out, "</td><td>%.2f</td><td>%u</td><td>%u</td></tr>",
         rows[i].score,
         rows[i].time_used, rows[i].memory_used);
