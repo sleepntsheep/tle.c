@@ -62,6 +62,11 @@ Every regular file under `files/` is copied to `WORK_DIR/files/` before the
 task stages run. These are trusted task assets such as headers, stubs, grader
 sources, or libraries for multi-file compilation.
 
+Each submission also receives a private persistent `ARTIFACT_DIR`, keyed by
+submission ID. A two-step judge may write intermediate files there during its
+first stage and read them during its second stage. The directory is not
+accessible to other submissions and is included in deployment backups.
+
 For communication tasks, a trusted `script/judge` may compile a manager and
 invoke the bundled helper as follows:
 

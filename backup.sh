@@ -5,6 +5,7 @@ database=${1:-tle.db}
 backup_dir=${TLE_BACKUP_DIR:-backups}
 keep=${TLE_BACKUP_KEEP:-14}
 task_dir=${TLE_TASKS_DIR:-tasks}
+artifact_dir=${TLE_ARTIFACTS_DIR:-artifacts}
 mkdir -p "$backup_dir"
 destination=${2:-"${backup_dir}/$(basename "$database").$(date -u +%Y%m%dT%H%M%SZ).backup"}
 
@@ -22,6 +23,12 @@ if [ -d "$task_dir" ]; then
   echo "Task archive written to $task_archive"
 fi
 
+if [ -d "$artifact_dir" ]; then
+  artifact_archive="${backup_dir}/tle-artifacts.$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+  tar -czf "$artifact_archive" -C "$(dirname "$artifact_dir")" "$(basename "$artifact_dir")"
+  echo "Artifact archive written to $artifact_archive"
+fi
+
 find "$backup_dir" -maxdepth 1 -type f \
   -name "$(basename "$database").*.backup" -printf '%T@ %p\n' 2>/dev/null |
   sort -nr | tail -n +$((keep + 1)) | cut -d' ' -f2- |
@@ -30,6 +37,12 @@ find "$backup_dir" -maxdepth 1 -type f \
   done
 
 find "$backup_dir" -maxdepth 1 -type f -name 'tle-tasks.*.tar.gz' -printf '%T@ %p\n' 2>/dev/null |
+  sort -nr | tail -n +$((keep + 1)) | cut -d' ' -f2- |
+  while IFS= read -r old_archive; do
+    [ -n "$old_archive" ] && rm -f -- "$old_archive"
+  done
+
+find "$backup_dir" -maxdepth 1 -type f -name 'tle-artifacts.*.tar.gz' -printf '%T@ %p\n' 2>/dev/null |
   sort -nr | tail -n +$((keep + 1)) | cut -d' ' -f2- |
   while IFS= read -r old_archive; do
     [ -n "$old_archive" ] && rm -f -- "$old_archive"

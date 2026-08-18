@@ -21,4 +21,5 @@ tle.db
 tle.db-shm
 tle.db-wal
 tasks/**
+artifacts/**
 tle/

@@ -11,6 +11,7 @@
 #define BASE_URL "http://localhost:8080"
 
 #define TASKS_PATH "./tasks"
+#define ARTIFACTS_PATH "./artifacts"
 
 #define DEFAULT_WEB_PORT 8080
 

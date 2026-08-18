@@ -3,7 +3,7 @@
 #include <dirent.h>
 
 /* prototypes */
-int grade(unsigned, const char *, unsigned *, unsigned *, double *, char **, char **);
+int grade(unsigned, unsigned, const char *, unsigned *, unsigned *, double *, char **, char **);
 void cleanup(int);
 int safe_tkcmp(const char *, const char *);
 int copy(char *, char *);
@@ -525,7 +525,7 @@ main (int argc, char **argv)
 
     info("grading submission %u for task %u", job.submission_id, job.task_pk);
 
-    rc = grade(job.task_pk, job.code, &time_used, &memory_used, &score,
+    rc = grade(job.submission_id, job.task_pk, job.code, &time_used, &memory_used, &score,
         &result, &compiler_output);
     if (rc != 0)
     {
@@ -683,7 +683,7 @@ copy_task_files(const char *task_path, const char *box_path)
 }
 
   int
-grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_used,
+grade(unsigned submission_id, unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_used,
     double *score, char **result, char **compiler_output)
 {
   if (run_isolate_cleanup() != 0)
@@ -699,6 +699,16 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
     return -1;
 
   snprintf(task_path, sizeof(task_path), "%s/%s", TASKS_PATH, task.name);
+
+  {
+    char artifact_dir[600];
+    if (mkdir(ARTIFACTS_PATH, 0700) != 0 && errno != EEXIST)
+      return -1;
+    snprintf(artifact_dir, sizeof artifact_dir, "%s/%u", ARTIFACTS_PATH, submission_id);
+    if (mkdir(artifact_dir, 0700) != 0 && errno != EEXIST)
+      return -1;
+    setenv("ARTIFACT_DIR", artifact_dir, 1);
+  }
 
   if (isolate_init_box(box_path, sizeof box_path) != 0)
   {
