@@ -25,6 +25,9 @@ export TLE_ADMIN_PASSWORD='choose-a-long-random-password'
 Then run `make` to compile, followed by `./run.sh` to start the grader and web
 server.
 
+Run `make task-check` before deploying task data. It validates manifests,
+special checkers, and the expected test-input files.
+
 Run `make runtime-check` on the deployment host. The grader requires an
 `isolate` installation with the privileges expected by that installation;
 the check actually initializes and cleans up a sandbox instead of assuming
@@ -57,4 +60,6 @@ without losing submissions and does not require a FIFO.
 
 Before upgrading, make a backup with `./backup.sh`. The database keeps a
 schema version and uses SQLite's online backup mechanism, so backups can be
-taken while the judge is running.
+taken while the judge is running. The same command also archives `tasks/` so
+the problem statements, checkers, and test data can be restored with the
+database. Set `TLE_TASKS_DIR` if the task directory is elsewhere.

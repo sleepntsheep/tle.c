@@ -36,7 +36,31 @@ same_origin_request(struct MHD_Connection *connection)
   const char *value = origin ? origin : referer;
   if (!value)
     return 0;
-  return !strncmp(value, base_url(), strlen(base_url()));
+  const char *base = base_url();
+  const char *base_authority = strstr(base, "://");
+  const char *value_authority = strstr(value, "://");
+  if (!base_authority || !value_authority) return 0;
+  base_authority += 3;
+  value_authority += 3;
+  size_t base_len = strcspn(base_authority, "/");
+  size_t value_len = strcspn(value_authority, "/");
+  return base_len == value_len && !strncmp(base_authority, value_authority, base_len) &&
+      !strncmp(base, value, (size_t)(base_authority - base));
+}
+
+static int
+secure_cookie_enabled(void)
+{
+  return !strncmp(base_url(), "https://", 8);
+}
+
+static int
+csrf_valid(int session_authenticated, const char *session_csrf,
+    const char *submitted_csrf)
+{
+  return session_authenticated && session_csrf && submitted_csrf &&
+      strlen(session_csrf) == 64 && strlen(submitted_csrf) == 64 &&
+      !strcmp(session_csrf, submitted_csrf);
 }
 
 static int
@@ -78,7 +102,11 @@ struct connection_info
     int judge_id;
     int is_public;
     int is_anonymous;
+    int file_field_seen;
+    int code_field_seen;
   } submission;
+
+  char csrf[65];
 
   char username[32];
   char password[256];
@@ -184,6 +212,14 @@ main(int argc, char **argv)
         DB_PATH, TASKS_PATH, DEFAULT_WEB_PORT, base_url());
     return 0;
   }
+  if (argc >= 2 && !strcmp(argv[1], "--check-tasks"))
+  {
+    db_init();
+    read_tasks();
+    db_cleanup();
+    puts("task assets passed");
+    return 0;
+  }
 
   const int cleanup_signals[] = {SIGINT, SIGTERM};
 
@@ -273,6 +309,7 @@ post_iterator(void *cls, enum MHD_ValueKind kind,
   }
   else if (0 == strcmp("file", key))
   {
+    if (size > 0) conn->submission.file_field_seen = 1;
     size_t current_size = conn->submission.code ? sdslen(conn->submission.code) : 0;
     if (current_size > MAX_CODE_BYTES || size > MAX_CODE_BYTES - current_size)
       return MHD_NO;
@@ -283,12 +320,21 @@ post_iterator(void *cls, enum MHD_ValueKind kind,
   }
   else if (0 == strcmp("code", key))
   {
+    if (size > 0) conn->submission.code_field_seen = 1;
     size_t current_size = conn->submission.code ? sdslen(conn->submission.code) : 0;
     if (current_size > MAX_CODE_BYTES || size > MAX_CODE_BYTES - current_size)
       return MHD_NO;
     if (conn->submission.code == NULL)
       conn->submission.code = sdsempty();
     conn->submission.code = sdscatlen(conn->submission.code, data, size);
+    return MHD_YES;
+  }
+  else if (0 == strcmp("csrf", key))
+  {
+    if (off > sizeof conn->csrf - 1 || size > sizeof conn->csrf - 1 - (size_t)off)
+      return MHD_NO;
+    memcpy(conn->csrf + off, data, size);
+    conn->csrf[off + size] = 0;
     return MHD_YES;
   }
   else if (0 == strcmp("is_public", key))
@@ -448,6 +494,10 @@ ahc_echo(void * cls,
     if (0 == strcmp(page, "submit"))
     {
       conn->pp = NULL;
+      if (session_authenticated && !csrf_valid(session_authenticated, csrf_token, conn->csrf))
+        return basic_response(connection, "csrf check failed", MHD_HTTP_FORBIDDEN, MHD_RESPMEM_PERSISTENT);
+      if (conn->submission.file_field_seen && conn->submission.code_field_seen)
+        return basic_response(connection, "choose either pasted code or a file", MHD_HTTP_BAD_REQUEST, MHD_RESPMEM_PERSISTENT);
       if (NULL == conn->submission.code || sdslen(conn->submission.code) == 0)
         return basic_response(connection, "code can't be empty", MHD_HTTP_BAD_REQUEST, MHD_RESPMEM_PERSISTENT);
 
@@ -489,7 +539,7 @@ ahc_echo(void * cls,
     {
       const char *pk_text = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "pk");
       unsigned pk;
-      if (!session_authenticated || !same_origin_request(connection) || !pk_text)
+      if (!csrf_valid(session_authenticated, csrf_token, conn->csrf) || !same_origin_request(connection) || !pk_text)
         return basic_response(connection, "bookmark request denied", MHD_HTTP_FORBIDDEN, MHD_RESPMEM_PERSISTENT);
       pk = strtoul(pk_text, NULL, 10);
       db_lock();
@@ -534,7 +584,7 @@ ahc_echo(void * cls,
         MHD_add_response_header(response, "Location", base_url());
         char cookie[160];
         snprintf(cookie, sizeof cookie, "tle_session=%s; Path=/; HttpOnly; SameSite=Lax%s",
-            token, tls_cert_material ? "; Secure" : "");
+            token, secure_cookie_enabled() ? "; Secure" : "");
         MHD_add_response_header(response, "Set-Cookie", cookie);
         db_unlock();
         ret = MHD_queue_response(connection, MHD_HTTP_FOUND, response);
@@ -761,7 +811,8 @@ ahc_echo(void * cls,
       db_unlock();
       if (fetch_result != 0)
         return response_internal_server_error(connection);
-      html = view_task_list(sdsempty(), username, items, item_count);
+      html = view_task_list(sdsempty(), username, items, item_count,
+          session_authenticated ? csrf_token : NULL);
       free_tasks(items);
     }
     else if (0 == strcmp(page, "task"))
@@ -890,7 +941,8 @@ ahc_echo(void * cls,
           return response_internal_server_error(connection);
       }
 
-      html = view_submit(sdsempty(), username, pk);
+      html = view_submit(sdsempty(), username, pk,
+          session_authenticated ? csrf_token : NULL);
     }
     else if (0 == strcmp(page, "register"))
     {

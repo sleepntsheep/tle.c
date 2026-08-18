@@ -14,6 +14,8 @@ Environment=TLE_TLS_KEY=
 ExecStart=/opt/selfhost/tle/tle_web
 Restart=on-failure
 RestartSec=3
+LimitNOFILE=4096
+TasksMax=128
 UMask=0007
 NoNewPrivileges=true
 PrivateTmp=true

@@ -142,6 +142,11 @@ db_init(void)
   ensure_column("tasks", "source", "TEXT NOT NULL DEFAULT ''");
   ensure_column("tasks", "estimated_minutes", "INTEGER NOT NULL DEFAULT 0");
   exec_sql("CREATE TABLE IF NOT EXISTS bookmarks (user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE, task_pk INTEGER NOT NULL REFERENCES tasks(task_pk) ON DELETE CASCADE, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, task_pk));");
+  if (version < 4)
+  {
+    set_schema_version(4);
+    version = 4;
+  }
   exec_sql(
     "CREATE TABLE IF NOT EXISTS grading_jobs ("
     "submission_id INTEGER PRIMARY KEY REFERENCES submissions(submission_id) ON DELETE CASCADE,"

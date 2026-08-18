@@ -228,6 +228,18 @@ read_tasks(void)
     copy_text(task.source, sizeof task.source,
         (const unsigned char *)(source ? source->valuestring : ""));
     task.estimated_minutes = estimated_minutes ? (unsigned)estimated_minutes->valueint : 0;
+    {
+      char asset_path[1024];
+      if (strcmp(task.comparison, "special") == 0 &&
+          access((snprintf(asset_path, sizeof asset_path, "%s/%s/jury.cpp", TASKS_PATH, task.name), asset_path), F_OK) != 0 &&
+          access((snprintf(asset_path, sizeof asset_path, "%s/%s/jury", TASKS_PATH, task.name), asset_path), F_OK) != 0)
+        die("special task %s has no jury.cpp or compiled jury", task.name);
+      for (unsigned case_id = 1; case_id <= task.count_cases; ++case_id)
+      {
+        snprintf(asset_path, sizeof asset_path, "%s/%s/tests/%u.in", TASKS_PATH, task.name, case_id);
+        if (access(asset_path, R_OK) != 0) die("task %s is missing %s", task.name, asset_path);
+      }
+    }
     consider_task(&task);
     mark_task_seen(task.pk);
     store_subtask_groups(task.pk, task_json);

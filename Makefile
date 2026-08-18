@@ -2,7 +2,7 @@
 cc = gcc
 cflags = -g3 -std=c99 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -Wall -Wextra -Wpedantic -pthread
 
-.PHONY: build check runtime-check healthcheck
+.PHONY: build check runtime-check healthcheck task-check
 
 config.h: config.def.h
 	cp config.def.h config.h
@@ -18,6 +18,9 @@ check: build
 
 healthcheck:
 	./healthcheck.sh
+
+task-check: build
+	./tle_web --check-tasks
 
 runtime-check: build
 	./tle_grader --check-runtime

@@ -42,7 +42,7 @@ view_front_page(sds out, const char *username,
 
 sds
 view_task_list(sds out, const char *username,
-    const struct task_list_item *items, size_t count)
+    const struct task_list_item *items, size_t count, const char *csrf)
 {
   out = begin(out, username, "tasks");
   out = sdscat(out, "<form method=\"get\"><input type=\"hidden\" name=\"page\" value=\"tasks\">"
@@ -62,7 +62,7 @@ view_task_list(sds out, const char *username,
     out = sdscat(out, "</td><td>"); out = html_escape_text(out, items[i].source);
     out = sdscat(out, "</td><td>");
     if (username && *username)
-      out = sdscatprintf(out, "<form class=\"inline-form\" action=\"?page=bookmark&amp;pk=%u\" method=\"post\"><button type=\"submit\">%s</button></form>", items[i].pk, items[i].bookmarked ? "★" : "☆");
+      out = sdscatprintf(out, "<form class=\"inline-form\" action=\"?page=bookmark&amp;pk=%u\" method=\"post\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><button type=\"submit\">%s</button></form>", items[i].pk, csrf ? csrf : "", items[i].bookmarked ? "★" : "☆");
     out = sdscat(out, "</td></tr>");
   }
   out = sdscat(out, "</tbody></table>");
@@ -236,20 +236,20 @@ view_pdf_statement(sds out, const char *username, const struct task *task)
 }
 
 sds
-view_submit(sds out, const char *username, unsigned task_pk)
+view_submit(sds out, const char *username, unsigned task_pk, const char *csrf)
 {
   out = begin(out, username, "submit");
   out = sdscatprintf(out,
       "<h1>Submit task %u</h1><p>The code must not be longer than %u bytes.</p>"
       "<form action=\"?page=submit&amp;pk=%u\" method=\"post\" enctype=\"multipart/form-data\">"
-      "<input type=\"hidden\" name=\"task_pk\" value=\"%u\">"
+      "<input type=\"hidden\" name=\"task_pk\" value=\"%u\"><input type=\"hidden\" name=\"csrf\" value=\"%s\">"
       "<label>Paste code <textarea name=\"code\" rows=\"18\" cols=\"80\" placeholder=\"Paste C or C++ code here\"></textarea></label>"
       "<p class=\"hint\">Or choose a source file instead. Use one submission method at a time.</p>"
       "<label>Code file <input type=\"file\" name=\"file\" accept=\".c,.cpp\"></label>"
       "<label><input type=\"checkbox\" name=\"is_public\" checked> Make code public</label>"
       "<label><input type=\"checkbox\" name=\"is_anonymous\"> Submit anonymously</label>"
       "<button type=\"submit\">Upload</button></form>",
-      task_pk, MAX_CODE_BYTES, task_pk, task_pk);
+      task_pk, MAX_CODE_BYTES, task_pk, task_pk, csrf ? csrf : "");
   return end(out);
 }
 
