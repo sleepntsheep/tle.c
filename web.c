@@ -550,6 +550,18 @@ ahc_echo(void * cls,
     page = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "page");
     sds html;
 
+    if (!strcmp(url, "/favicon.svg"))
+    {
+      struct MHD_Response *favicon = MHD_create_response_from_buffer(
+          strlen(html_favicon_svg), (void *)html_favicon_svg, MHD_RESPMEM_PERSISTENT);
+      int ret;
+      add_safety_headers(favicon);
+      MHD_add_response_header(favicon, "Content-Type", "image/svg+xml");
+      ret = MHD_queue_response(connection, MHD_HTTP_OK, favicon);
+      MHD_destroy_response(favicon);
+      return ret;
+    }
+
     if (0 != *upload_data_size)
       return MHD_NO; /* upload data in a GET!? */
     *ptr = NULL; /* clear context pointer */

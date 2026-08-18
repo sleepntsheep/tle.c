@@ -1,6 +1,12 @@
 #include "html.h"
 #include "common.h"
 
+const char html_favicon_svg[] =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" role=\"img\" aria-labelledby=\"title\">"
+    "<title>tle</title><rect width=\"64\" height=\"64\" fill=\"#111\"/>"
+    "<path d=\"m16 17 15 15-15 15M37 47h12\" fill=\"none\" stroke=\"#fff\" stroke-linecap=\"square\" stroke-width=\"5\"/>"
+    "</svg>";
+
 static int
 line_is_blank(const char *line)
 {
@@ -41,6 +47,7 @@ sds
 html_page_header(sds out, const char *username, const char *title)
 {
   out = sdscat(out, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
+  out = sdscat(out, "<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\">");
   out = sdscat(out, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
   out = sdscat(out, "<title>");
   out = html_escape_text(out, title ? title : "tle grader");

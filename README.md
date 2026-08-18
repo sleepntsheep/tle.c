@@ -3,6 +3,11 @@
 
 an online judge for competitive programming, purely developed in C
 
+The interface uses a small monochrome terminal-style favicon. Its mark is a
+minimal `>_` shape, representing a submitted program and the judge response:
+
+![tle favicon](assets/favicon.svg)
+
 
 # deployment:
 

@@ -7,5 +7,6 @@ sds html_escape_text(sds out, const char *text);
 sds html_page_header(sds out, const char *username, const char *title);
 sds html_page_footer(sds out);
 sds html_markdown(sds out, const char *text);
+extern const char html_favicon_svg[];
 
 #endif
