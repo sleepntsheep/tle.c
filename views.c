@@ -17,6 +17,8 @@ end(sds out)
 static sds
 compact_submission_status(sds out, const struct submission_row *row)
 {
+  if (row->subtask_results[0])
+    return sdscat(out, row->subtask_results);
   const char *code = "..";
   if (!strcmp(row->verdict, "accepted")) code = "AC";
   else if (!strcmp(row->verdict, "wrong_answer")) code = "WA";
@@ -135,6 +137,13 @@ view_submission_detail(sds out, const char *username,
   out = sdscatprintf(out, "</dd><dt>Score</dt><dd>%.2f</dd>"
       "<dt>Time</dt><dd>%u ms</dd><dt>Memory</dt><dd>%u KiB</dd>",
       submission->score, submission->time_used, submission->memory_used);
+  if (submission->subtask_results[0])
+    out = sdscat(out, "<dt>Subtasks</dt><dd><code>");
+  if (submission->subtask_results[0])
+  {
+    out = html_escape_text(out, submission->subtask_results);
+    out = sdscat(out, "</code><p class=\"hint\">Each bracket is one subtask. A = accepted, W = wrong answer, T = time limit, M = memory limit, R = runtime error, E = judge error.</p></dd>");
+  }
   if (submission->failed_case >= 0)
     out = sdscatprintf(out, "<dt>Failed case</dt><dd>%d</dd>", submission->failed_case);
   out = sdscat(out, "<dt>Submitted</dt><dd>");

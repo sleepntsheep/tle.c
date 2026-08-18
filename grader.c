@@ -3,7 +3,7 @@
 #include <dirent.h>
 
 /* prototypes */
-int grade(unsigned, unsigned, const char *, unsigned *, unsigned *, double *, char **, char **);
+int grade(unsigned, unsigned, const char *, unsigned *, unsigned *, double *, char **, char **, char **);
 void cleanup(int);
 int safe_tkcmp(const char *, const char *);
 int copy(char *, char *);
@@ -448,6 +448,17 @@ has_subtask_groups(unsigned task_pk)
   return has_groups;
 }
 
+static char
+subtask_case_marker(const char *result)
+{
+  if (!result || !*result || !strcmp(result, "accepted!")) return 'A';
+  if (!strncmp(result, "wa#", 3)) return 'W';
+  if (!strncmp(result, "time limit exceeded", 19)) return 'T';
+  if (!strncmp(result, "memory limit exceeded", 21)) return 'M';
+  if (!strncmp(result, "signal(", 7) || !strncmp(result, "exitcode(", 9)) return 'R';
+  return 'E';
+}
+
 /* variables */
 struct task task;
 
@@ -498,8 +509,9 @@ main (int argc, char **argv)
 
     info("grading submission %u for task %u", job.submission_id, job.task_pk);
 
+    char *subtask_results = NULL;
     rc = grade(job.submission_id, job.task_pk, job.code, &time_used, &memory_used, &score,
-        &result, &compiler_output);
+        &result, &compiler_output, &subtask_results);
     if (rc != 0)
     {
       free(result);
@@ -507,11 +519,12 @@ main (int argc, char **argv)
     }
 
     if (complete_submission(job.submission_id, result, time_used, memory_used,
-          score, compiler_output, job.claim_token) != 0)
+          score, compiler_output, subtask_results, job.claim_token) != 0)
       warn("submission %u could not be marked finished", job.submission_id);
 
     free(result);
     free(compiler_output);
+    free(subtask_results);
     free_submission_job(&job);
   }
 
@@ -657,13 +670,14 @@ copy_task_files(const char *task_path, const char *box_path)
 
   int
 grade(unsigned submission_id, unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_used,
-    double *score, char **result, char **compiler_output)
+    double *score, char **result, char **compiler_output, char **subtask_results_out)
 {
   if (run_isolate_cleanup() != 0)
     warn("isolate cleanup failed before grading");
 
   *result = strdup("grading");
   *compiler_output = NULL;
+  *subtask_results_out = NULL;
 
   static struct task task;
   char task_path[9999], box_path[256];
@@ -771,6 +785,7 @@ grade(unsigned submission_id, unsigned task_pk, const char *code, unsigned *time
   sds first_failure = NULL;
   unsigned passed_cases = 0;
   int uniform_scoring = !has_subtask_groups(task_pk);
+  sds subtask_results = sdsempty();
   struct subtask_group *groups = NULL;
   size_t group_count = 0;
   unsigned char *failed_groups = NULL;
@@ -797,6 +812,15 @@ grade(unsigned submission_id, unsigned task_pk, const char *code, unsigned *time
 
   for (unsigned case_id = 1; case_id <= task.count_cases; ++case_id)
   {
+    if ((!uniform_scoring && group_count > 0 && case_id == groups[0].case_start) ||
+        (uniform_scoring && case_id == 1))
+      subtask_results = sdscat(subtask_results, "[");
+    else if (!uniform_scoring)
+    {
+      for (size_t i = 0; i < group_count; ++i)
+        if (case_id == groups[i].case_start)
+          subtask_results = sdscat(subtask_results, "[");
+    }
     sds sysinput, sysoutput, /* absolute path to testcase input / output */
         boxsysinput, boxsuboutput, /* path of those previous two files copied to isolate's environment */
         relboxsysinput, relboxsuboutput, /* relative path of previous two files, relative to box's environment */
@@ -1051,6 +1075,17 @@ grade(unsigned submission_id, unsigned task_pk, const char *code, unsigned *time
 
 
 end_case:
+    subtask_results = sdscatlen(subtask_results, (char[]){subtask_case_marker(raw_results)}, 1);
+    if ((uniform_scoring && case_id == task.count_cases) ||
+        (!uniform_scoring && group_count > 0 &&
+         case_id == groups[group_count - 1].case_start + groups[group_count - 1].case_count - 1))
+      subtask_results = sdscat(subtask_results, "]");
+    else if (!uniform_scoring)
+    {
+      for (size_t i = 0; i + 1 < group_count; ++i)
+        if (case_id == groups[i].case_start + groups[i].case_count - 1)
+          subtask_results = sdscat(subtask_results, "][");
+    }
     sdsfree(sysoutput);       sysoutput       = NULL;
     sdsfree(sysinput);        sysinput        = NULL;
     sdsfree(boxsuboutput);    boxsuboutput    = NULL;
@@ -1139,6 +1174,9 @@ end_case:
   *score = total_score;
   free(failed_groups);
   free_subtask_groups(groups);
+  if (sdslen(subtask_results) > 0)
+    *subtask_results_out = strdup(subtask_results);
+  sdsfree(subtask_results);
   free(*result);
   *result = strdup(raw_results);
   sdsfree(raw_results);

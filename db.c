@@ -163,6 +163,12 @@ db_init(void)
     drop_column_if_exists("tasks", "estimated_minutes");
     set_schema_version(5);
   }
+  if (version < 6)
+  {
+    ensure_column("submissions", "subtask_results", "TEXT");
+    set_schema_version(6);
+    version = 6;
+  }
   exec_sql(
     "CREATE TABLE IF NOT EXISTS grading_jobs ("
     "submission_id INTEGER PRIMARY KEY REFERENCES submissions(submission_id) ON DELETE CASCADE,"

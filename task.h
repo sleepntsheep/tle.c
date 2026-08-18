@@ -35,6 +35,7 @@ struct submission_row
   char task_name[256];
   char verdict[64];
   char verdict_message[256];
+  char subtask_results[1024];
   char submission_time[64];
   double score;
 };
@@ -70,6 +71,7 @@ struct submission_detail
   char task_name[256];
   char verdict[64];
   char verdict_message[1024];
+  char subtask_results[1024];
   char compiler_output[16384];
   char job_status[16];
   char submission_time[64];
@@ -164,7 +166,8 @@ claim_submission(struct submission_job *job);
 int
 complete_submission(unsigned submission_id, const char *result,
     unsigned time_used, unsigned memory_used, double score,
-    const char *compiler_output, const char *claim_token);
+    const char *compiler_output, const char *subtask_results,
+    const char *claim_token);
 
 void
 free_submission_job(struct submission_job *job);

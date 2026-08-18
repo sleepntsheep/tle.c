@@ -424,7 +424,7 @@ fetch_submissions(struct submission_row **rows, size_t *count, unsigned from, un
     const char *user_filter, unsigned task_filter, const char *verdict_filter)
 {
   sds sql = sdscatprintf(sdsempty(),
-    "SELECT s.submission_id,COALESCE(s.verdict,s.result,j.status),s.time_used,s.memory_used,s.submission_time,s.is_public,u.username,t.name,s.score,s.verdict_message "
+    "SELECT s.submission_id,COALESCE(s.verdict,s.result,j.status),s.time_used,s.memory_used,s.submission_time,s.is_public,u.username,t.name,s.score,s.verdict_message,s.subtask_results "
     "FROM submissions s LEFT JOIN grading_jobs j ON j.submission_id=s.submission_id "
     "LEFT JOIN users u ON u.user_id=s.user_id LEFT JOIN tasks t ON t.task_pk=s.task_pk "
     "WHERE s.submission_id<?1");
@@ -467,6 +467,7 @@ fetch_submissions(struct submission_row **rows, size_t *count, unsigned from, un
     row->score = sqlite3_column_type(stmt, 8) == SQLITE_NULL ? 0.0 : sqlite3_column_double(stmt, 8);
     copy_text(row->verdict, sizeof row->verdict, sqlite3_column_text(stmt, 1));
     copy_text(row->verdict_message, sizeof row->verdict_message, sqlite3_column_text(stmt, 9));
+    copy_text(row->subtask_results, sizeof row->subtask_results, sqlite3_column_text(stmt, 10));
     copy_text(row->submission_time, sizeof row->submission_time, sqlite3_column_text(stmt, 4));
     copy_text(row->username, sizeof row->username, sqlite3_column_text(stmt, 6));
     copy_text(row->task_name, sizeof row->task_name, sqlite3_column_text(stmt, 7));
@@ -600,7 +601,7 @@ parse_verdict(const char *result, char *verdict, size_t verdict_size, int *faile
 int
 complete_submission(unsigned submission_id, const char *result, unsigned time_used,
     unsigned memory_used, double score, const char *compiler_output,
-    const char *claim_token)
+    const char *subtask_results, const char *claim_token)
 {
   char verdict[32], failed_case_text[16];
   int failed_case;
@@ -611,7 +612,7 @@ complete_submission(unsigned submission_id, const char *result, unsigned time_us
   sqlite3_bind_int(stmt, 1, (int)submission_id); sqlite3_bind_text(stmt, 2, claim_token, -1, SQLITE_TRANSIENT);
   if (sqlite3_step(stmt) != SQLITE_DONE || sqlite3_changes(db) != 1) { sqlite3_finalize(stmt); goto fail; }
   sqlite3_finalize(stmt);
-  if (sqlite3_prepare_v2(db, "UPDATE submissions SET verdict=?1,failed_case=?2,verdict_message=?3,time_used=?4,memory_used=?5,score=?6,compiler_output=?7 WHERE submission_id=?8", -1, &stmt, NULL) != SQLITE_OK) goto fail;
+  if (sqlite3_prepare_v2(db, "UPDATE submissions SET verdict=?1,failed_case=?2,verdict_message=?3,time_used=?4,memory_used=?5,score=?6,compiler_output=?7,subtask_results=?8 WHERE submission_id=?9", -1, &stmt, NULL) != SQLITE_OK) goto fail;
   sqlite3_bind_text(stmt, 1, verdict, -1, SQLITE_TRANSIENT);
   if (failed_case < 0) sqlite3_bind_null(stmt, 2); else { snprintf(failed_case_text, sizeof failed_case_text, "%d", failed_case); sqlite3_bind_int(stmt, 2, failed_case); }
   sqlite3_bind_text(stmt, 3, result, -1, SQLITE_TRANSIENT); sqlite3_bind_int(stmt, 4, (int)time_used); sqlite3_bind_int(stmt, 5, (int)memory_used); sqlite3_bind_double(stmt, 6, score);
@@ -619,7 +620,11 @@ complete_submission(unsigned submission_id, const char *result, unsigned time_us
     sqlite3_bind_text(stmt, 7, compiler_output, -1, SQLITE_TRANSIENT);
   else
     sqlite3_bind_null(stmt, 7);
-  sqlite3_bind_int(stmt, 8, (int)submission_id);
+  if (subtask_results && *subtask_results)
+    sqlite3_bind_text(stmt, 8, subtask_results, -1, SQLITE_TRANSIENT);
+  else
+    sqlite3_bind_null(stmt, 8);
+  sqlite3_bind_int(stmt, 9, (int)submission_id);
   if (sqlite3_step(stmt) != SQLITE_DONE) { sqlite3_finalize(stmt); goto fail; }
   sqlite3_finalize(stmt);
   if (sqlite3_exec(db, "COMMIT", NULL, NULL, NULL) != SQLITE_OK) return -1;
@@ -642,7 +647,7 @@ fetch_submission_detail(unsigned id, struct submission_detail *out)
   const char *sql =
     "SELECT s.submission_id,s.user_id,s.task_pk,COALESCE(s.verdict,s.result,j.status),"
     "s.time_used,s.memory_used,s.score,s.is_public,s.failed_case,s.verdict_message,"
-    "s.compiler_output,s.submission_time,u.username,t.name,j.status "
+    "s.compiler_output,s.subtask_results,s.submission_time,u.username,t.name,j.status "
     "FROM submissions s LEFT JOIN grading_jobs j ON j.submission_id=s.submission_id "
     "LEFT JOIN users u ON u.user_id=s.user_id LEFT JOIN tasks t ON t.task_pk=s.task_pk "
     "WHERE s.submission_id=?1";
@@ -667,10 +672,11 @@ fetch_submission_detail(unsigned id, struct submission_detail *out)
   out->failed_case = sqlite3_column_type(stmt, 8) == SQLITE_NULL ? -1 : sqlite3_column_int(stmt, 8);
   copy_text(out->verdict_message, sizeof out->verdict_message, sqlite3_column_text(stmt, 9));
   copy_text(out->compiler_output, sizeof out->compiler_output, sqlite3_column_text(stmt, 10));
-  copy_text(out->submission_time, sizeof out->submission_time, sqlite3_column_text(stmt, 11));
-  copy_text(out->username, sizeof out->username, sqlite3_column_text(stmt, 12));
-  copy_text(out->task_name, sizeof out->task_name, sqlite3_column_text(stmt, 13));
-  copy_text(out->job_status, sizeof out->job_status, sqlite3_column_text(stmt, 14));
+  copy_text(out->subtask_results, sizeof out->subtask_results, sqlite3_column_text(stmt, 11));
+  copy_text(out->submission_time, sizeof out->submission_time, sqlite3_column_text(stmt, 12));
+  copy_text(out->username, sizeof out->username, sqlite3_column_text(stmt, 13));
+  copy_text(out->task_name, sizeof out->task_name, sqlite3_column_text(stmt, 14));
+  copy_text(out->job_status, sizeof out->job_status, sqlite3_column_text(stmt, 15));
   if (!out->username[0]) strcpy(out->username, "anonymous");
   if (!out->task_name[0]) strcpy(out->task_name, "unknown");
   if (!out->verdict[0]) strcpy(out->verdict, out->job_status[0] ? out->job_status : "pending");
