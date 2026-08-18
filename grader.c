@@ -72,6 +72,15 @@ score_for_failed_case(unsigned task_pk, unsigned failed_case, double max_score)
   double score = 0.0;
   if (fetch_subtask_groups(task_pk, &groups, &count) != 0)
     return 0.0;
+  if (count == 0)
+  {
+    struct task task_data;
+    double uniform_score = 0.0;
+    if (fetch_task_by_pk(task_pk, &task_data) == 0 && task_data.count_cases > 0 && failed_case > 0)
+      uniform_score = max_score * (double)(failed_case - 1) / (double)task_data.count_cases;
+    free_subtask_groups(groups);
+    return uniform_score;
+  }
   for (size_t i = 0; i < count; ++i)
   {
     unsigned last_case = groups[i].case_start + groups[i].case_count - 1;
