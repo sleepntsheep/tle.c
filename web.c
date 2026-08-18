@@ -173,31 +173,6 @@ anonymous_submission_allowed(struct MHD_Connection *connection)
   return allowed;
 }
 
-static void
-load_sample_tests(struct task *task)
-{
-  char input_path[1024], output_path[1024];
-  int input_size = 0, output_size = 0;
-  char *input, *output;
-  task->sample_input[0] = 0;
-  task->sample_output[0] = 0;
-  if (snprintf(input_path, sizeof input_path, "%s/%s/tests/1.in", TASKS_PATH,
-        task->name) >= (int)sizeof input_path ||
-      snprintf(output_path, sizeof output_path, "%s/%s/tests/1.sol", TASKS_PATH,
-        task->name) >= (int)sizeof output_path)
-    return;
-  input = read_file(input_path, &input_size);
-  output = read_file(output_path, &output_size);
-  if (input)
-    snprintf(task->sample_input, sizeof task->sample_input, "%.*s",
-        input_size > (int)sizeof task->sample_input - 1 ? (int)sizeof task->sample_input - 1 : input_size, input);
-  if (output)
-    snprintf(task->sample_output, sizeof task->sample_output, "%.*s",
-        output_size > (int)sizeof task->sample_output - 1 ? (int)sizeof task->sample_output - 1 : output_size, output);
-  free(input);
-  free(output);
-}
-
 /* definition */
 int
 main(int argc, char **argv)
@@ -830,7 +805,6 @@ ahc_echo(void * cls,
       if (0 != task_result)
         return MHD_NO;
 
-      load_sample_tests(&task);
       {
         sds description = NULL;
         int statement_pdf = !strcmp(strrchr(task.desc, '.') ? strrchr(task.desc, '.') : "", ".pdf");

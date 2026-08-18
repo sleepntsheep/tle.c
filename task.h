@@ -14,8 +14,6 @@ struct task
   double max_score;
   unsigned submission_count;
   unsigned accepted_count;
-  char sample_input[2048];
-  char sample_output[2048];
 };
 
 struct task_list_item

@@ -187,21 +187,6 @@ view_task(sds out, const char *username, const struct task *task,
         "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\"></script>"
         "<script>window.addEventListener('load',function(){if(typeof renderMathInElement==='function')renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]});});</script>");
   }
-  if (task->sample_input[0])
-  {
-    out = sdscat(out, "<h2>Sample test</h2><div><strong>Input</strong><pre>");
-    out = html_escape_text(out, task->sample_input);
-    out = sdscat(out, "</pre>");
-    if (task->sample_output[0])
-    {
-      out = sdscat(out, "<strong>Output</strong><pre>");
-      out = html_escape_text(out, task->sample_output);
-      out = sdscat(out, "</pre>");
-    }
-    else if (!strcmp(task->comparison, "special"))
-      out = sdscat(out, "<p class=\"hint\">Output is validated by a special checker; any valid answer is accepted.</p>");
-    out = sdscat(out, "</div>");
-  }
   return end(out);
 }
 
