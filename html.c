@@ -14,6 +14,75 @@ line_is_blank(const char *line)
   return *line == 0;
 }
 
+static int
+table_row(const char *line)
+{
+  size_t length;
+  if (!line || line[0] != '|') return 0;
+  length = strlen(line);
+  while (length && (line[length - 1] == ' ' || line[length - 1] == '\t')) --length;
+  return length > 1 && line[length - 1] == '|';
+}
+
+static int
+table_separator(const char *line)
+{
+  int dash = 0;
+  if (!table_row(line)) return 0;
+  for (const char *p = line; *p; ++p)
+  {
+    if (*p == '-') dash = 1;
+    else if (*p != '|' && *p != ':' && *p != ' ' && *p != '\t') return 0;
+  }
+  return dash;
+}
+
+static int
+next_line_is_table_separator(const char *end)
+{
+  const char *start;
+  const char *next_end;
+  sds next;
+  size_t length;
+
+  if (!end || !end[0]) return 0;
+  start = end + 1;
+  next_end = strchr(start, '\n');
+  length = next_end ? (size_t)(next_end - start) : strlen(start);
+  next = sdsnewlen(start, length);
+  while (sdslen(next) && next[sdslen(next) - 1] == '\r') sdsIncrLen(next, -1);
+  int result = table_separator(next);
+  sdsfree(next);
+  return result;
+}
+
+static sds
+append_table_row(sds out, const char *line, int header)
+{
+  const char *start = line + 1;
+  const char *finish = line + strlen(line);
+  const char *cell = start;
+  out = sdscat(out, header ? "<tr>" : "<tr>");
+  if (finish > start && finish[-1] == '|') --finish;
+  for (const char *p = start; p <= finish; ++p)
+  {
+    if (p == finish || *p == '|')
+    {
+      const char *left = cell;
+      const char *right = p;
+      while (left < right && (*left == ' ' || *left == '\t')) ++left;
+      while (right > left && (right[-1] == ' ' || right[-1] == '\t')) --right;
+      sds value = sdsnewlen(left, (size_t)(right - left));
+      out = sdscat(out, header ? "<th>" : "<td>");
+      out = html_escape_text(out, value);
+      sdsfree(value);
+      out = sdscat(out, header ? "</th>" : "</td>");
+      cell = p + 1;
+    }
+  }
+  return sdscat(out, "</tr>");
+}
+
 static sds
 markdown_inline(sds out, const char *text)
 {
@@ -114,6 +183,7 @@ html_markdown(sds out, const char *text)
   int in_list = 0;
   int in_paragraph = 0;
   int in_math_block = 0;
+  int in_table = 0;
 
   while (*cursor)
   {
@@ -121,6 +191,12 @@ html_markdown(sds out, const char *text)
     size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
     sds line = sdsnewlen(cursor, length);
     while (line[sdslen(line)] == '\r') sdsIncrLen(line, -1);
+
+    if (in_table && !table_row(line))
+    {
+      out = sdscat(out, "</tbody></table>");
+      in_table = 0;
+    }
 
     if (in_math_block)
     {
@@ -158,6 +234,19 @@ html_markdown(sds out, const char *text)
     {
       if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
       if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+    }
+    else if (table_row(line) && !in_table && next_line_is_table_separator(end))
+    {
+      if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
+      if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+      out = sdscat(out, "<table><thead>");
+      out = append_table_row(out, line, 1);
+      out = sdscat(out, "</thead><tbody>");
+      in_table = 1;
+    }
+    else if (in_table && table_row(line))
+    {
+      if (!table_separator(line)) out = append_table_row(out, line, 0);
     }
     else
     {
@@ -198,6 +287,7 @@ html_markdown(sds out, const char *text)
   }
   if (in_paragraph) out = sdscat(out, "</p>");
   if (in_list) out = sdscat(out, "</ul>");
+  if (in_table) out = sdscat(out, "</tbody></table>");
   if (in_code) out = sdscat(out, "</code></pre>");
   if (in_math_block) out = sdscat(out, "</div>");
   return out;
