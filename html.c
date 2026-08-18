@@ -68,11 +68,13 @@ html_page_header(sds out, const char *username, const char *title)
       "<li><a href=\"/\">frontpage</a></li>"
       "<li><a href=\"?page=tasks\">tasks</a></li>"
       "<li><a href=\"?page=submissions\">submissions</a></li>"
-      "<li><a href=\"?page=leaderboard\">leaderboard</a></li>"
-      "<li><a href=\"?page=register\">register</a></li>"
-      "<li><a href=\"?page=login\">login</a></li>"
-      "<li><a href=\"?page=logout\">logout</a></li>"
-      "</ul></nav></header><main>");
+      "<li><a href=\"?page=leaderboard\">leaderboard</a></li>");
+  if (username && *username)
+    out = sdscat(out, "<li><a href=\"?page=logout\">logout</a></li>");
+  else
+    out = sdscat(out, "<li><a href=\"?page=register\">register</a></li>"
+                     "<li><a href=\"?page=login\">login</a></li>");
+  out = sdscat(out, "</ul></nav></header><main>");
   return out;
 }
 
