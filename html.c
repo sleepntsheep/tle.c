@@ -1,6 +1,21 @@
 #include "html.h"
 #include "common.h"
 
+static int
+line_is_blank(const char *line)
+{
+  while (*line == ' ' || *line == '\t') ++line;
+  return *line == 0;
+}
+
+static sds
+markdown_inline(sds out, const char *text)
+{
+  /* Escape all source text. KaTeX's auto-render pass can still recognize
+   * math delimiters in the resulting text nodes, while HTML stays inert. */
+  return html_escape_text(out, text);
+}
+
 sds
 html_escape_text(sds out, const char *text)
 {
@@ -56,6 +71,11 @@ html_page_header(sds out, const char *username, const char *title)
       "dl{display:grid;grid-template-columns:max-content 1fr;gap:.45rem 1.5rem;padding:1rem;background:var(--paper);border:1px solid var(--line)}"
       "dt{font-weight:600;color:var(--muted)}dd{margin:0}"
       "footer{margin-top:3rem;padding:1rem 0;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}"
+      ".statement{max-width:52rem;background:var(--paper);padding:1.5rem 2rem;border:1px solid var(--line)}"
+      ".statement h1,.statement h2,.statement h3{margin-top:1.5rem}.statement h1:first-child{margin-top:0}"
+      ".statement ul{padding-left:1.5rem}.statement code{padding:.1rem .25rem;background:var(--wash)}"
+      ".statement pre{white-space:pre-wrap}.statement-frame{width:100%;height:75vh;border:1px solid var(--line);background:var(--paper)}"
+      ".math-block{text-align:center;overflow:auto;margin:1rem 0}"
       "</style></head><body>");
   out = sdscat(out, "<header><nav><ul>");
   if (username && *username)
@@ -75,6 +95,82 @@ html_page_header(sds out, const char *username, const char *title)
     out = sdscat(out, "<li><a href=\"?page=register\">register</a></li>"
                      "<li><a href=\"?page=login\">login</a></li>");
   out = sdscat(out, "</ul></nav></header><main>");
+  return out;
+}
+
+sds
+html_markdown(sds out, const char *text)
+{
+  const char *cursor = text ? text : "";
+  int in_code = 0;
+  int in_list = 0;
+  int in_paragraph = 0;
+
+  while (*cursor)
+  {
+    const char *end = strchr(cursor, '\n');
+    size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
+    sds line = sdsnewlen(cursor, length);
+    while (line[sdslen(line)] == '\r') sdsIncrLen(line, -1);
+
+    if (!strcmp(line, "```") || !strncmp(line, "```", 3))
+    {
+      if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
+      if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+      if (in_code) out = sdscat(out, "</code></pre>");
+      else out = sdscat(out, "<pre><code>");
+      in_code = !in_code;
+    }
+    else if (in_code)
+    {
+      out = markdown_inline(out, line);
+      out = sdscat(out, "\n");
+    }
+    else if (line_is_blank(line))
+    {
+      if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
+      if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+    }
+    else
+    {
+      const char *content = line;
+      int heading = 0;
+      while (*content == '#') { ++heading; ++content; }
+      if (heading && heading <= 3 && *content == ' ')
+      {
+        if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
+        if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+        while (*content == ' ') ++content;
+        out = sdscatprintf(out, "<h%d>", heading);
+        out = markdown_inline(out, content);
+        out = sdscatprintf(out, "</h%d>", heading);
+      }
+      else if ((content[0] == '-' || content[0] == '*') && content[1] == ' ')
+      {
+        if (in_paragraph) { out = sdscat(out, "</p>"); in_paragraph = 0; }
+        if (!in_list) { out = sdscat(out, "<ul>"); in_list = 1; }
+        out = sdscat(out, "<li>");
+        out = markdown_inline(out, content + 2);
+        out = sdscat(out, "</li>");
+      }
+      else
+      {
+        if (in_list) { out = sdscat(out, "</ul>"); in_list = 0; }
+        if (!in_paragraph) { out = sdscat(out, "<p>"); in_paragraph = 1; }
+        else out = sdscat(out, "<br>");
+        if (!strncmp(content, "$$", 2) || !strncmp(content, "\\[", 2))
+          out = sdscat(out, "<span class=\"math-block\">");
+        out = markdown_inline(out, content);
+        if (!strncmp(content, "$$", 2) || !strncmp(content, "\\[", 2))
+          out = sdscat(out, "</span>");
+      }
+    }
+    sdsfree(line);
+    cursor = end ? end + 1 : cursor + length;
+  }
+  if (in_paragraph) out = sdscat(out, "</p>");
+  if (in_list) out = sdscat(out, "</ul>");
+  if (in_code) out = sdscat(out, "</code></pre>");
   return out;
 }
 

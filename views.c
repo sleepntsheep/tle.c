@@ -182,6 +182,30 @@ view_task(sds out, const char *username, const struct task *task)
 }
 
 sds
+view_statement(sds out, const char *username, const struct task *task, const char *markdown)
+{
+  out = begin(out, username, "task statement");
+  out = sdscat(out, "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css\">");
+  out = sdscatprintf(out, "<h1>Task %u: ", task->pk);
+  out = html_escape_text(out, task->name);
+  out = sdscat(out, "</h1><article class=\"statement\">");
+  out = html_markdown(out, markdown);
+  out = sdscat(out, "</article><script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js\"></script>"
+      "<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\" onload=\"renderMathInElement(document.querySelector('.statement'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\\\[',right:'\\\\]',display:true},{left:'\\\\(',right:'\\\\)',display:false},{left:'$',right:'$',display:false}]})\"></script>");
+  return end(out);
+}
+
+sds
+view_pdf_statement(sds out, const char *username, const struct task *task)
+{
+  out = begin(out, username, "task statement");
+  out = sdscatprintf(out, "<h1>Task %u: ", task->pk);
+  out = html_escape_text(out, task->name);
+  out = sdscatprintf(out, "</h1><iframe class=\"statement-frame\" title=\"Task statement\" src=\"?page=desc_file&amp;pk=%u\"></iframe>", task->pk);
+  return end(out);
+}
+
+sds
 view_submit(sds out, const char *username, unsigned task_pk)
 {
   out = begin(out, username, "submit");

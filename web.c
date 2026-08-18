@@ -17,6 +17,7 @@ enum MHD_Result post_iterator(void *, enum MHD_ValueKind, const char *, const ch
 static enum MHD_Result ahc_echo(void *, struct MHD_Connection *, const char *, const char *, const char *, const char *, size_t *, void **);
 static enum MHD_Result response_not_found(struct MHD_Connection *);
 static enum MHD_Result response_internal_server_error(struct MHD_Connection *);
+static void add_safety_headers(struct MHD_Response *);
 
 static const char *
 base_url(void)
@@ -737,12 +738,13 @@ ahc_echo(void * cls,
       load_sample_tests(&task);
       html = view_task(sdsempty(), username, &task);
     }
-    else if (0 == strcmp(page, "desc"))
+    else if (0 == strcmp(page, "desc") || 0 == strcmp(page, "desc_file"))
     {
       unsigned pk;
       const char *pk_;
       int file_size;
       int ret;
+      int raw_file = 0 == strcmp(page, "desc_file");
       char *file_content; 
       sds path;
       struct task task;
@@ -772,9 +774,27 @@ ahc_echo(void * cls,
       if (NULL == (file_content = read_file_binary(path, &file_size)))
         return response_internal_server_error(connection);
 
+      if (!raw_file)
+      {
+        const char *extension = strrchr(task.desc, '.');
+        if (extension && !strcmp(extension, ".pdf"))
+          html = view_pdf_statement(sdsempty(), username, &task);
+        else
+        {
+          sds markdown = sdsnewlen(file_content, file_size);
+          html = view_statement(sdsempty(), username, &task, markdown);
+          sdsfree(markdown);
+        }
+        free(file_content);
+        sdsfree(path);
+        return basic_response_sds(connection, html, MHD_HTTP_OK);
+      }
+
       response = MHD_create_response_from_buffer(file_size, file_content, MHD_RESPMEM_MUST_FREE);
 
+      add_safety_headers(response);
       MHD_add_response_header(response, "Content-Type", get_content_type(path));
+      MHD_add_response_header(response, "Content-Disposition", "inline");
       sdsfree(path);
       ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
       MHD_destroy_response(response);
@@ -883,7 +903,7 @@ static void
 add_safety_headers(struct MHD_Response *response)
 {
   MHD_add_response_header(response, "X-Content-Type-Options", "nosniff");
-  MHD_add_response_header(response, "X-Frame-Options", "DENY");
+  MHD_add_response_header(response, "X-Frame-Options", "SAMEORIGIN");
   /*
    * MHD_add_response_header(response, "Content-Security-Policy", "default-src '*'; script-src 'self'; style-src '*';");
   MHD_add_response_header(response, "Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
