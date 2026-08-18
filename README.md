@@ -48,6 +48,16 @@ built-in compilation step. It receives the same task/workspace variables plus
 executable at `EXECUTABLE` on success. The normal isolated execution and
 comparison path then continues unchanged.
 
+An executable `script/run` can replace execution for each testcase. It receives
+`CASE_ID`, `INPUT_FILE`, `OUTPUT_FILE`, `STAT_FILE`, `EXECUTABLE`, and the task
+limits. It must write the contestant output and an isolate-compatible stat
+file. An executable `script/check` can replace comparison for each testcase;
+it receives `INPUT_FILE`, `ANSWER_FILE`, `OUTPUT_FILE`, `CASE_ID`, and
+`RESULT_FILE`, and writes `ok` or `wa` as the first line of `RESULT_FILE`.
+An executable `script/score` can replace the final score calculation. It
+receives `PASSED_CASES`, `CASE_COUNT`, `MAX_SCORE`, `LAST_RESULT`, and
+`RESULT_FILE`, and must write `score=<number>` to `RESULT_FILE`.
+
 This provides a stable extension point for multi-file, output-only,
 communication, and interactive tasks while ordinary tasks continue using the
 built-in evaluator. Task scripts are trusted grading code and must never be

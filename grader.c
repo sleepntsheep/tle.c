@@ -104,6 +104,159 @@ run_task_compile_script(const char *task_path, const char *box_path,
   return 0;
 }
 
+struct task_stage_env
+{
+  const char *name;
+  const char *value;
+};
+
+static int
+execute_task_stage(const char *script_path, const char *box_path,
+    const struct task_stage_env *env, size_t env_count)
+{
+  pid_t pid;
+  int status, elapsed = 0;
+  pid = fork();
+  if (pid < 0)
+    return -1;
+  if (pid == 0)
+  {
+    if (chdir(box_path) != 0)
+      _exit(127);
+    for (size_t i = 0; i < env_count; ++i)
+      setenv(env[i].name, env[i].value, 1);
+    execl("/bin/sh", "sh", script_path, NULL);
+    _exit(127);
+  }
+  for (;;)
+  {
+    pid_t waited = waitpid(pid, &status, WNOHANG);
+    if (waited == pid)
+      break;
+    if (waited < 0)
+      return -1;
+    if (elapsed++ >= 300)
+    {
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      return -1;
+    }
+    usleep(100000);
+  }
+  return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
+/* Return 1 when absent, 0 when the custom run completed, -1 on script error. */
+static int
+run_task_run_script(const char *task_path, const char *box_path,
+    const struct task *task, unsigned case_id, const char *input_file,
+    const char *output_file, const char *stat_file)
+{
+  char script_path[1200], case_text[32], time_text[32], memory_text[32];
+  struct task_stage_env env[11];
+  int i = 0;
+  snprintf(script_path, sizeof script_path, "%s/script/run", task_path);
+  if (access(script_path, X_OK) != 0)
+    return 1;
+  snprintf(case_text, sizeof case_text, "%u", case_id);
+  snprintf(time_text, sizeof time_text, "%u", task->time_limit);
+  snprintf(memory_text, sizeof memory_text, "%u", task->memory_limit);
+  env[i++] = (struct task_stage_env){"TASK_HOME", task_path};
+  env[i++] = (struct task_stage_env){"WORK_DIR", box_path};
+  env[i++] = (struct task_stage_env){"EXECUTABLE", "./exec"};
+  env[i++] = (struct task_stage_env){"CASE_ID", case_text};
+  env[i++] = (struct task_stage_env){"INPUT_FILE", input_file};
+  env[i++] = (struct task_stage_env){"OUTPUT_FILE", output_file};
+  env[i++] = (struct task_stage_env){"STAT_FILE", stat_file};
+  env[i++] = (struct task_stage_env){"TIME_LIMIT", time_text};
+  env[i++] = (struct task_stage_env){"MEMORY_LIMIT", memory_text};
+  return execute_task_stage(script_path, box_path, env, (size_t)i);
+}
+
+/* Return 1 when absent, 0 for ok, 2 for wrong answer, -1 on script error. */
+static int
+run_task_check_script(const char *task_path, const char *box_path,
+    unsigned case_id, const char *input_file, const char *answer_file,
+    const char *output_file, char **message)
+{
+  char script_path[1200], result_path[600], case_text[32];
+  struct task_stage_env env[8];
+  int i = 0, size = 0;
+  char *check_result, *first_line;
+  *message = NULL;
+  snprintf(script_path, sizeof script_path, "%s/script/check", task_path);
+  if (access(script_path, X_OK) != 0)
+    return 1;
+  snprintf(result_path, sizeof result_path, "%s/check-result-%u", box_path, case_id);
+  unlink(result_path);
+  snprintf(case_text, sizeof case_text, "%u", case_id);
+  env[i++] = (struct task_stage_env){"TASK_HOME", task_path};
+  env[i++] = (struct task_stage_env){"WORK_DIR", box_path};
+  env[i++] = (struct task_stage_env){"CASE_ID", case_text};
+  env[i++] = (struct task_stage_env){"INPUT_FILE", input_file};
+  env[i++] = (struct task_stage_env){"ANSWER_FILE", answer_file};
+  env[i++] = (struct task_stage_env){"OUTPUT_FILE", output_file};
+  env[i++] = (struct task_stage_env){"RESULT_FILE", result_path};
+  if (execute_task_stage(script_path, box_path, env, (size_t)i) != 0)
+    return -1;
+  check_result = read_file(result_path, &size);
+  if (!check_result)
+    return -1;
+  first_line = trim_line(check_result);
+  if (!strncmp(first_line, "message=", 8))
+    *message = strdup(first_line + 8);
+  int verdict = !strncmp(first_line, "ok", 2) ? 0 :
+      (!strncmp(first_line, "wa", 2) ? 2 : -1);
+  free(check_result);
+  return verdict;
+}
+
+/* Return 1 when absent, 0 on success, -1 on script or protocol error. */
+static int
+run_task_score_script(const char *task_path, const char *box_path,
+    const struct task *task, unsigned passed_cases, const char *last_result,
+    double *score)
+{
+  char script_path[1200], result_path[600], cases_text[32], count_text[32], max_text[64];
+  struct task_stage_env env[8];
+  int i = 0, size = 0;
+  char *score_result, *line, *saveptr = NULL;
+  int found = 0;
+  snprintf(script_path, sizeof script_path, "%s/script/score", task_path);
+  if (access(script_path, X_OK) != 0)
+    return 1;
+  snprintf(result_path, sizeof result_path, "%s/score-result", box_path);
+  unlink(result_path);
+  snprintf(cases_text, sizeof cases_text, "%u", passed_cases);
+  snprintf(count_text, sizeof count_text, "%u", task->count_cases);
+  snprintf(max_text, sizeof max_text, "%.17g", task->max_score);
+  env[i++] = (struct task_stage_env){"TASK_HOME", task_path};
+  env[i++] = (struct task_stage_env){"WORK_DIR", box_path};
+  env[i++] = (struct task_stage_env){"RESULT_FILE", result_path};
+  env[i++] = (struct task_stage_env){"PASSED_CASES", cases_text};
+  env[i++] = (struct task_stage_env){"CASE_COUNT", count_text};
+  env[i++] = (struct task_stage_env){"MAX_SCORE", max_text};
+  env[i++] = (struct task_stage_env){"LAST_RESULT", last_result ? last_result : ""};
+  if (execute_task_stage(script_path, box_path, env, (size_t)i) != 0)
+    return -1;
+  score_result = read_file(result_path, &size);
+  if (!score_result)
+    return -1;
+  for (line = strtok_r(score_result, "\n", &saveptr); line;
+      line = strtok_r(NULL, "\n", &saveptr))
+  {
+    line = trim_line(line);
+    if (!strncmp(line, "score=", 6))
+    {
+      *score = strtod(line + 6, NULL);
+      found = 1;
+      break;
+    }
+  }
+  free(score_result);
+  return found ? 0 : -1;
+}
+
 /*
  * Run a trusted task-provided judge script.
  *
@@ -583,43 +736,56 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
     suboutput       = sdscatprintf(sdsempty(), "/tmp/%u.out", case_id);
 
     copy(sysinput, boxsysinput);
+    unlink(stat_file);
+    unlink(boxsuboutput);
 
     /* run isolated submission code */
     {
-      pid_t pid;
+      int custom_run = run_task_run_script(task_path, box_path, &task, case_id,
+          relboxsysinput, relboxsuboutput, stat_file);
 
-      pid = fork();
-
-      if (0 == pid) /* child */
+      if (custom_run < 0)
       {
-        execl(ISOLATE_PATH,
-            "isolate",
-            sdscatprintf(sdsempty(), "--meta=%s", stat_file),
-            sdscatprintf(sdsempty(), "--mem=%u", task.memory_limit),
-            sdscatprintf(sdsempty(), "--stack=%u", task.memory_limit),
-            sdscatprintf(sdsempty(), "--time=%f", task.time_limit / 1000.0f),
-            sdscatprintf(sdsempty(), "--stdin=%s", relboxsysinput),
-            sdscatprintf(sdsempty(), "--stdout=%s", relboxsuboutput),
-            "--run",
-            "--",
-            "./exec",
-            NULL);
-        _exit(127);
+        raw_results = sdscatprintf(sdsempty(), "internal error:run script failed#%u", case_id);
+        goto end_case;
       }
-      else if (0 < pid) /* parent */
+      if (custom_run == 1)
       {
-        int status;
-        waitpid (pid, &status, 0);
+        pid_t pid;
 
-        if (WIFEXITED (status) && 0 == WEXITSTATUS (status))
-          ;
-        else
+        pid = fork();
+
+        if (0 == pid) /* child */
         {
-          ;
+          execl(ISOLATE_PATH,
+              "isolate",
+              sdscatprintf(sdsempty(), "--meta=%s", stat_file),
+              sdscatprintf(sdsempty(), "--mem=%u", task.memory_limit),
+              sdscatprintf(sdsempty(), "--stack=%u", task.memory_limit),
+              sdscatprintf(sdsempty(), "--time=%f", task.time_limit / 1000.0f),
+              sdscatprintf(sdsempty(), "--stdin=%s", relboxsysinput),
+              sdscatprintf(sdsempty(), "--stdout=%s", relboxsuboutput),
+              "--run",
+              "--",
+              "./exec",
+              NULL);
+          _exit(127);
         }
+        else if (0 < pid) /* parent */
+        {
+          int status;
+          waitpid (pid, &status, 0);
+
+          if (WIFEXITED (status) && 0 == WEXITSTATUS (status))
+            ;
+          else
+          {
+            ;
+          }
+        }
+        else
+          diep("fork failed");
       }
-      else
-        diep("fork failed");
     }
 
     copy(boxsuboutput, suboutput);
@@ -700,7 +866,21 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
     }
     else
     {
-      if (0 == strcmp(task.comparison, "special"))
+      char *check_message = NULL;
+      int custom_check = run_task_check_script(task_path, box_path, case_id,
+          sysinput, sysoutput, suboutput, &check_message);
+      free(check_message);
+      if (custom_check < 0)
+      {
+        raw_results = sdscatprintf(sdsempty(), "internal error:check script failed#%u", case_id);
+        goto end_case;
+      }
+      if (custom_check == 2)
+      {
+        raw_results = sdscatprintf(sdsempty(), "wa#%u", case_id);
+        goto end_case;
+      }
+      if (custom_check == 1 && 0 == strcmp(task.comparison, "special"))
       {
         int fildes[2];
         pid_t pid;
@@ -774,7 +954,7 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
         else
           diep("fork failed");
       }
-      else
+      else if (custom_check == 1)
       {
         if (! safe_tkcmp(sysoutput, suboutput))
         {
@@ -836,6 +1016,21 @@ end_case:
     if (failed_case)
       total_score = score_for_failed_case(task_pk, failed_case, task.max_score);
     }
+  }
+
+  {
+    double custom_score = total_score;
+    int score_status = run_task_score_script(task_path, box_path, &task,
+        passed_cases, raw_results, &custom_score);
+    if (score_status < 0)
+    {
+      sdsfree(raw_results);
+      raw_results = sdsnew("internal error:score script failed");
+      custom_score = 0.0;
+    }
+    else if (score_status == 0)
+      total_score = custom_score < 0.0 ? 0.0 :
+          (custom_score > task.max_score ? task.max_score : custom_score);
   }
 
   *time_used = max_time;
