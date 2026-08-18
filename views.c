@@ -47,20 +47,15 @@ view_task_list(sds out, const char *username,
   out = begin(out, username, "tasks");
   out = sdscat(out, "<form method=\"get\"><input type=\"hidden\" name=\"page\" value=\"tasks\">"
       "<label>Search <input name=\"q\" placeholder=\"task name\"></label>"
-      "<label>Difficulty <select name=\"difficulty\"><option value=\"\">all</option><option>easy</option><option>medium</option><option>hard</option></select></label>"
-      "<label>Tag <input name=\"tag\" placeholder=\"graph, dp, math\"></label>"
       "<label>Show <select name=\"state\"><option value=\"\">all tasks</option><option value=\"solved\">solved</option><option value=\"tried\">tried but unsolved</option><option value=\"bookmarked\">bookmarked</option></select></label>"
       "<button type=\"submit\">Filter</button></form>");
-  out = sdscat(out, "<table><thead><tr><th></th><th>ID</th><th>Task</th><th>Difficulty</th><th>Topics</th><th>Stats</th><th></th></tr></thead><tbody>");
+  out = sdscat(out, "<table><thead><tr><th></th><th>ID</th><th>Task</th><th></th></tr></thead><tbody>");
   for (size_t i = 0; i < count; ++i)
   {
     out = sdscatprintf(out, "<tr><td>%s</td><td>%u</td><td><a href=\"?page=task&amp;pk=%u\">",
         items[i].solved ? "✓" : items[i].tried ? "·" : "", items[i].pk, items[i].pk);
     out = html_escape_text(out, items[i].name);
-    out = sdscat(out, "</a></td><td>"); out = html_escape_text(out, items[i].difficulty);
-    out = sdscat(out, "</td><td>"); out = html_escape_text(out, items[i].tags);
-    out = sdscat(out, "</td><td>"); out = html_escape_text(out, items[i].source);
-    out = sdscat(out, "</td><td>");
+    out = sdscat(out, "</a></td><td>");
     if (username && *username)
       out = sdscatprintf(out, "<form class=\"inline-form\" action=\"?page=bookmark&amp;pk=%u\" method=\"post\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><button type=\"submit\">%s</button></form>", items[i].pk, csrf ? csrf : "", items[i].bookmarked ? "★" : "☆");
     out = sdscat(out, "</td></tr>");
