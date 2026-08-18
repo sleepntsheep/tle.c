@@ -281,6 +281,16 @@ post_iterator(void *cls, enum MHD_ValueKind kind,
     conn->submission.code = sdscatlen(conn->submission.code, data, size);
     return MHD_YES;
   }
+  else if (0 == strcmp("code", key))
+  {
+    size_t current_size = conn->submission.code ? sdslen(conn->submission.code) : 0;
+    if (current_size > MAX_CODE_BYTES || size > MAX_CODE_BYTES - current_size)
+      return MHD_NO;
+    if (conn->submission.code == NULL)
+      conn->submission.code = sdsempty();
+    conn->submission.code = sdscatlen(conn->submission.code, data, size);
+    return MHD_YES;
+  }
   else if (0 == strcmp("is_public", key))
   {
     conn->submission.is_public = 1;
@@ -473,6 +483,23 @@ ahc_echo(void * cls,
         ret = MHD_queue_response(connection, MHD_HTTP_FOUND, response);
         MHD_destroy_response(response);
       }
+      return ret;
+    }
+    else if (0 == strcmp(page, "bookmark"))
+    {
+      const char *pk_text = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "pk");
+      unsigned pk;
+      if (!session_authenticated || !same_origin_request(connection) || !pk_text)
+        return basic_response(connection, "bookmark request denied", MHD_HTTP_FORBIDDEN, MHD_RESPMEM_PERSISTENT);
+      pk = strtoul(pk_text, NULL, 10);
+      db_lock();
+      int bookmark_result = toggle_bookmark(user_id, pk);
+      db_unlock();
+      if (bookmark_result < 0) return response_internal_server_error(connection);
+      response = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+      MHD_add_response_header(response, "Location", base_url());
+      ret = MHD_queue_response(connection, MHD_HTTP_FOUND, response);
+      MHD_destroy_response(response);
       return ret;
     }
     else if (0 == strcmp(page, "register"))
@@ -708,6 +735,10 @@ ahc_echo(void * cls,
     else if (0 == strcmp(page, "tasks"))
     {
       const char *show_solved;
+      const char *query = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "q");
+      const char *difficulty = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "difficulty");
+      const char *tag = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "tag");
+      const char *state = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "state");
 
       if (auth_fail)
         user_id = -1;
@@ -719,11 +750,14 @@ ahc_echo(void * cls,
         if (strcmp(show_solved, "0") && strcmp(show_solved, "1"))
           return response_not_found(connection);
       }
+      if (state && strcmp(state, "") && strcmp(state, "solved") && strcmp(state, "tried") && strcmp(state, "bookmarked"))
+        return response_not_found(connection);
 
       struct task_list_item *items = NULL;
       size_t item_count = 0;
       db_lock();
-      int fetch_result = fetch_tasks(&items, &item_count, user_id, show_solved);
+      int fetch_result = fetch_tasks_filtered(&items, &item_count, user_id, show_solved,
+          query, difficulty, tag, state);
       db_unlock();
       if (fetch_result != 0)
         return response_internal_server_error(connection);

@@ -100,7 +100,8 @@ db_init(void)
     "task_pk INTEGER PRIMARY KEY, name TEXT NOT NULL, desc_path TEXT NOT NULL,"
     "memory_limit INTEGER NOT NULL, time_limit INTEGER NOT NULL,"
     "max_score REAL NOT NULL, count_cases INTEGER NOT NULL, comparison TEXT NOT NULL,"
-    "is_hidden INTEGER NOT NULL DEFAULT 0"
+    "is_hidden INTEGER NOT NULL DEFAULT 0, difficulty TEXT NOT NULL DEFAULT 'unknown',"
+    "tags TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', estimated_minutes INTEGER NOT NULL DEFAULT 0"
     ");"
   );
   exec_sql(
@@ -136,6 +137,11 @@ db_init(void)
     ensure_column("sessions", "csrf_token", "TEXT");
     set_schema_version(3);
   }
+  ensure_column("tasks", "difficulty", "TEXT NOT NULL DEFAULT 'unknown'");
+  ensure_column("tasks", "tags", "TEXT NOT NULL DEFAULT ''");
+  ensure_column("tasks", "source", "TEXT NOT NULL DEFAULT ''");
+  ensure_column("tasks", "estimated_minutes", "INTEGER NOT NULL DEFAULT 0");
+  exec_sql("CREATE TABLE IF NOT EXISTS bookmarks (user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE, task_pk INTEGER NOT NULL REFERENCES tasks(task_pk) ON DELETE CASCADE, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, task_pk));");
   exec_sql(
     "CREATE TABLE IF NOT EXISTS grading_jobs ("
     "submission_id INTEGER PRIMARY KEY REFERENCES submissions(submission_id) ON DELETE CASCADE,"

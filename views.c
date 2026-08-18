@@ -21,12 +21,11 @@ task_list_table(sds out, const struct task_list_item *items, size_t count)
   for (size_t i = 0; i < count; ++i)
   {
     out = sdscatprintf(out, "<tr><td>%s</td><td>%u</td><td><a href=\"?page=task&amp;pk=%u\">",
-        items[i].solved ? "☑" : "", items[i].pk, items[i].pk);
+        items[i].solved ? "✓" : "", items[i].pk, items[i].pk);
     out = html_escape_text(out, items[i].name);
     out = sdscat(out, "</a></td></tr>");
   }
-  out = sdscat(out, "</tbody></table>");
-  return out;
+  return sdscat(out, "</tbody></table>");
 }
 
 sds
@@ -46,9 +45,27 @@ view_task_list(sds out, const char *username,
     const struct task_list_item *items, size_t count)
 {
   out = begin(out, username, "tasks");
-  out = sdscat(out, "<p class=\"actions\">Solved tasks: <a class=\"button\" href=\"?page=tasks\">show</a> "
-                    "<a class=\"button\" href=\"?page=tasks&amp;show_solved=0\">hide</a></p>");
-  out = task_list_table(out, items, count);
+  out = sdscat(out, "<form method=\"get\"><input type=\"hidden\" name=\"page\" value=\"tasks\">"
+      "<label>Search <input name=\"q\" placeholder=\"task name\"></label>"
+      "<label>Difficulty <select name=\"difficulty\"><option value=\"\">all</option><option>easy</option><option>medium</option><option>hard</option></select></label>"
+      "<label>Tag <input name=\"tag\" placeholder=\"graph, dp, math\"></label>"
+      "<label>Show <select name=\"state\"><option value=\"\">all tasks</option><option value=\"solved\">solved</option><option value=\"tried\">tried but unsolved</option><option value=\"bookmarked\">bookmarked</option></select></label>"
+      "<button type=\"submit\">Filter</button></form>");
+  out = sdscat(out, "<table><thead><tr><th></th><th>ID</th><th>Task</th><th>Difficulty</th><th>Topics</th><th>Stats</th><th></th></tr></thead><tbody>");
+  for (size_t i = 0; i < count; ++i)
+  {
+    out = sdscatprintf(out, "<tr><td>%s</td><td>%u</td><td><a href=\"?page=task&amp;pk=%u\">",
+        items[i].solved ? "✓" : items[i].tried ? "·" : "", items[i].pk, items[i].pk);
+    out = html_escape_text(out, items[i].name);
+    out = sdscat(out, "</a></td><td>"); out = html_escape_text(out, items[i].difficulty);
+    out = sdscat(out, "</td><td>"); out = html_escape_text(out, items[i].tags);
+    out = sdscat(out, "</td><td>"); out = html_escape_text(out, items[i].source);
+    out = sdscat(out, "</td><td>");
+    if (username && *username)
+      out = sdscatprintf(out, "<form class=\"inline-form\" action=\"?page=bookmark&amp;pk=%u\" method=\"post\"><button type=\"submit\">%s</button></form>", items[i].pk, items[i].bookmarked ? "★" : "☆");
+    out = sdscat(out, "</td></tr>");
+  }
+  out = sdscat(out, "</tbody></table>");
   return end(out);
 }
 
@@ -164,6 +181,13 @@ view_task(sds out, const char *username, const struct task *task,
       "<p class=\"actions\"><a class=\"button\" href=\"?page=submit&amp;pk=%u\">Submit code</a></p>",
       task->memory_limit, task->time_limit, task->submission_count,
       task->accepted_count, task->pk);
+  out = sdscat(out, "<dl><dt>Difficulty</dt><dd>");
+  out = html_escape_text(out, task->difficulty[0] ? task->difficulty : "unknown");
+  out = sdscat(out, "</dd><dt>Topics</dt><dd>");
+  out = html_escape_text(out, task->tags[0] ? task->tags : "—");
+  if (task->source[0]) { out = sdscat(out, "</dd><dt>Source</dt><dd>"); out = html_escape_text(out, task->source); }
+  if (task->estimated_minutes) out = sdscatprintf(out, "</dd><dt>Estimated time</dt><dd>%u minutes", task->estimated_minutes);
+  out = sdscat(out, "</dd></dl>");
   out = sdscat(out, "<h2>Statement</h2>");
   if (statement_pdf)
     out = sdscatprintf(out, "<iframe class=\"statement-frame\" title=\"Task statement\" src=\"?page=desc_file&amp;pk=%u\"></iframe>", task->pk);
@@ -226,7 +250,9 @@ view_submit(sds out, const char *username, unsigned task_pk)
       "<h1>Submit task %u</h1><p>The code must not be longer than %u bytes.</p>"
       "<form action=\"?page=submit&amp;pk=%u\" method=\"post\" enctype=\"multipart/form-data\">"
       "<input type=\"hidden\" name=\"task_pk\" value=\"%u\">"
-      "<label>Code file <input type=\"file\" name=\"file\" accept=\".c,.cpp\" required></label>"
+      "<label>Paste code <textarea name=\"code\" rows=\"18\" cols=\"80\" placeholder=\"Paste C or C++ code here\"></textarea></label>"
+      "<p class=\"hint\">Or choose a source file instead. Use one submission method at a time.</p>"
+      "<label>Code file <input type=\"file\" name=\"file\" accept=\".c,.cpp\"></label>"
       "<label><input type=\"checkbox\" name=\"is_public\" checked> Make code public</label>"
       "<label><input type=\"checkbox\" name=\"is_anonymous\"> Submit anonymously</label>"
       "<button type=\"submit\">Upload</button></form>",
