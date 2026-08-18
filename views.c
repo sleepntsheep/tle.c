@@ -181,13 +181,6 @@ view_task(sds out, const char *username, const struct task *task,
       "<p class=\"actions\"><a class=\"button\" href=\"?page=submit&amp;pk=%u\">Submit code</a></p>",
       task->memory_limit, task->time_limit, task->submission_count,
       task->accepted_count, task->pk);
-  out = sdscat(out, "<dl><dt>Difficulty</dt><dd>");
-  out = html_escape_text(out, task->difficulty[0] ? task->difficulty : "unknown");
-  out = sdscat(out, "</dd><dt>Topics</dt><dd>");
-  out = html_escape_text(out, task->tags[0] ? task->tags : "—");
-  if (task->source[0]) { out = sdscat(out, "</dd><dt>Source</dt><dd>"); out = html_escape_text(out, task->source); }
-  if (task->estimated_minutes) out = sdscatprintf(out, "</dd><dt>Estimated time</dt><dd>%u minutes", task->estimated_minutes);
-  out = sdscat(out, "</dd></dl>");
   out = sdscat(out, "<h2>Statement</h2>");
   if (statement_pdf)
     out = sdscatprintf(out, "<iframe class=\"statement-frame\" title=\"Task statement\" src=\"?page=desc_file&amp;pk=%u\"></iframe>", task->pk);
