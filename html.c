@@ -41,6 +41,7 @@ html_page_header(sds out, const char *username, const char *title)
       "a{color:var(--ink);text-decoration-thickness:1px;text-underline-offset:.15em}"
       "h1{font-size:1.7rem;line-height:1.2;margin:0 0 1.25rem}h2{font-size:1.15rem;margin-top:2rem}"
       "p{margin:0 0 1rem}.actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.25rem 0}"
+      ".hint{padding:.75rem 1rem;border-left:2px solid var(--ink);color:var(--muted);background:#fafafa}"
       "table{width:100%;border-collapse:collapse;background:var(--paper);margin:1.25rem 0 1.5rem}"
       "th,td{padding:.65rem .75rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}"
       "th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}"

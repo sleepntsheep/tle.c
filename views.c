@@ -163,13 +163,20 @@ view_task(sds out, const char *username, const struct task *task)
       "<a class=\"button\" href=\"?page=desc&amp;pk=%u\">Task statement</a></p>",
       task->memory_limit, task->time_limit, task->submission_count,
       task->accepted_count, task->pk, task->pk);
-  if (task->sample_input[0] || task->sample_output[0])
+  if (task->sample_input[0])
   {
     out = sdscat(out, "<h2>Sample test</h2><div><strong>Input</strong><pre>");
     out = html_escape_text(out, task->sample_input);
-    out = sdscat(out, "</pre><strong>Output</strong><pre>");
-    out = html_escape_text(out, task->sample_output);
-    out = sdscat(out, "</pre></div>");
+    out = sdscat(out, "</pre>");
+    if (task->sample_output[0])
+    {
+      out = sdscat(out, "<strong>Output</strong><pre>");
+      out = html_escape_text(out, task->sample_output);
+      out = sdscat(out, "</pre>");
+    }
+    else if (!strcmp(task->comparison, "special"))
+      out = sdscat(out, "<p class=\"hint\">Output is validated by a special checker; any valid answer is accepted.</p>");
+    out = sdscat(out, "</div>");
   }
   return end(out);
 }
