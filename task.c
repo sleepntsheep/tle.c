@@ -202,11 +202,19 @@ read_tasks(void)
           access((snprintf(asset_path, sizeof asset_path, "%s/%s/jury.cpp", TASKS_PATH, task.name), asset_path), F_OK) != 0 &&
           access((snprintf(asset_path, sizeof asset_path, "%s/%s/jury", TASKS_PATH, task.name), asset_path), F_OK) != 0)
         die("special task %s has no jury.cpp or compiled jury", task.name);
-      snprintf(asset_path, sizeof asset_path, "%s/%s/script/judge", TASKS_PATH, task.name);
-      if (access(asset_path, F_OK) == 0 &&
-          (stat(asset_path, &script_stat) != 0 || !S_ISREG(script_stat.st_mode) ||
-           access(asset_path, X_OK) != 0))
-        die("task %s has a script/judge that is not a regular executable file", task.name);
+      {
+        static const char *stage_names[] = {"judge", "compile", "run", "check", "score"};
+        for (size_t stage = 0; stage < countof(stage_names); ++stage)
+        {
+          snprintf(asset_path, sizeof asset_path, "%s/%s/script/%s",
+              TASKS_PATH, task.name, stage_names[stage]);
+          if (access(asset_path, F_OK) == 0 &&
+              (stat(asset_path, &script_stat) != 0 || !S_ISREG(script_stat.st_mode) ||
+               access(asset_path, X_OK) != 0))
+            die("task %s has a script/%s that is not a regular executable file",
+                task.name, stage_names[stage]);
+        }
+      }
       for (unsigned case_id = 1; case_id <= task.count_cases; ++case_id)
       {
         snprintf(asset_path, sizeof asset_path, "%s/%s/tests/%u.in", TASKS_PATH, task.name, case_id);
