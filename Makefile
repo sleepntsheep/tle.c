@@ -10,6 +10,7 @@ config.h: config.def.h
 build: config.h
 	$(cc) $(cflags) -o tle_web    html.c views.c sds.c web.c cJSON.c task.c utils.c db.c md5.c user.c -lsqlite3 -lm -lmicrohttpd -lcrypt
 	$(cc) $(cflags) -o tle_grader sds.c db.c grader.c cJSON.c task.c utils.c             -lsqlite3 -lm
+	$(cc) $(cflags) -o tle_communicate communicate.c                              -lm
 
 check: build
 	git diff --check

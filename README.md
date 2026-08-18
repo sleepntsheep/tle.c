@@ -62,6 +62,19 @@ Every regular file under `files/` is copied to `WORK_DIR/files/` before the
 task stages run. These are trusted task assets such as headers, stubs, grader
 sources, or libraries for multi-file compilation.
 
+For communication tasks, a trusted `script/judge` may compile a manager and
+invoke the bundled helper as follows:
+
+```
+tle_communicate "$WORK_DIR" "$TASK_HOME/files/manager" "$TIME_LIMIT" "$MEMORY_LIMIT"
+```
+
+The helper connects the manager's standard input/output to the contestant's
+standard input/output, runs the contestant through `isolate` with inherited
+file descriptors, and terminates both processes if the communication exceeds
+the time limit. The manager is task-author code; the contestant remains inside
+the isolate sandbox.
+
 This provides a stable extension point for multi-file, output-only,
 communication, and interactive tasks while ordinary tasks continue using the
 built-in evaluator. Task scripts are trusted grading code and must never be
