@@ -28,6 +28,25 @@ server.
 Run `make task-check` before deploying task data. It validates manifests,
 special checkers, and the expected test-input files.
 
+Tasks may optionally provide an executable `script/judge`. When present, the
+grader runs that administrator-owned script instead of the built-in batch
+evaluator. It receives `TASK_HOME`, `WORK_DIR`, `SUBMISSION`, `RESULT_FILE`,
+`TIME_LIMIT`, and `MEMORY_LIMIT`. The script must run contestant-controlled
+programs through `isolate` and write these key-value fields to `RESULT_FILE`:
+
+```
+result=accepted!
+score=100
+time_ms=12
+memory_kb=2048
+compiler_output_file=/path/to/compiler.err
+```
+
+This provides a stable extension point for multi-file, output-only,
+communication, and interactive tasks while ordinary tasks continue using the
+built-in evaluator. Task scripts are trusted grading code and must never be
+created from contestant submissions.
+
 Run `make runtime-check` on the deployment host. The grader requires an
 `isolate` installation with the privileges expected by that installation;
 the check actually initializes and cleans up a sandbox instead of assuming

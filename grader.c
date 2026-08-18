@@ -7,6 +7,139 @@ void cleanup(int);
 int safe_tkcmp(const char *, const char *);
 
 static int
+write_submission_source(const char *box_path, const char *code)
+{
+  char path[600];
+  FILE *fp;
+  size_t length = strlen(code);
+  snprintf(path, sizeof path, "%s/submission.cpp", box_path);
+  fp = fopen(path, "w");
+  if (!fp)
+    return -1;
+  if (fwrite(code, 1, length, fp) != length || fclose(fp) != 0)
+    return -1;
+  return 0;
+}
+
+static char *
+trim_line(char *line)
+{
+  char *end;
+  while (*line && strchr(" \t\r\n", *line))
+    ++line;
+  end = line + strlen(line);
+  while (end > line && strchr(" \t\r\n", end[-1]))
+    *--end = '\0';
+  return line;
+}
+
+/*
+ * Run a trusted task-provided judge script.
+ *
+ * The script receives TASK_HOME, WORK_DIR, SUBMISSION, RESULT_FILE and
+ * MEMORY_LIMIT/TIME_LIMIT. It must write key=value lines to RESULT_FILE:
+ *   result=accepted!
+ *   score=100
+ *   time_ms=12
+ *   memory_kb=2048
+ *   compiler_output_file=/absolute/path (optional)
+ *
+ * Task scripts are administrator-owned grading code, just like jury.cpp.
+ * They are deliberately not treated as contestant code and must invoke
+ * isolate themselves for every contestant-controlled process.
+ */
+static int
+run_task_script(const char *task_path, const char *box_path, const char *code,
+    const struct task *task, unsigned *time_used, unsigned *memory_used,
+    double *score, char **result, char **compiler_output)
+{
+  char script_path[1200], result_path[600];
+  char *result_file, *line, *saveptr = NULL;
+  pid_t pid;
+  int status, elapsed = 0;
+
+  snprintf(script_path, sizeof script_path, "%s/script/judge", task_path);
+  if (access(script_path, X_OK) != 0)
+    return 1; /* no custom script: use the built-in evaluator */
+  if (write_submission_source(box_path, code) != 0)
+    return -1;
+  snprintf(result_path, sizeof result_path, "%s/task-result", box_path);
+  unlink(result_path);
+
+  pid = fork();
+  if (pid < 0)
+    return -1;
+  if (pid == 0)
+  {
+    char limit[32];
+    setenv("TASK_HOME", task_path, 1);
+    setenv("WORK_DIR", box_path, 1);
+    setenv("SUBMISSION", "./submission.cpp", 1);
+    setenv("RESULT_FILE", result_path, 1);
+    snprintf(limit, sizeof limit, "%u", task->memory_limit);
+    setenv("MEMORY_LIMIT", limit, 1);
+    snprintf(limit, sizeof limit, "%u", task->time_limit);
+    setenv("TIME_LIMIT", limit, 1);
+    execl("/bin/sh", "sh", script_path, NULL);
+    _exit(127);
+  }
+
+  /* A broken administrator script must not wedge the only grading worker. */
+  for (;;)
+  {
+    pid_t waited = waitpid(pid, &status, WNOHANG);
+    if (waited == pid)
+      break;
+    if (waited < 0)
+      return -1;
+    if (elapsed++ >= 300)
+    {
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      return -1;
+    }
+    usleep(100000);
+  }
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+    return -1;
+
+  result_file = read_file(result_path, NULL);
+  if (!result_file)
+    return -1;
+  *result = NULL;
+  *compiler_output = NULL;
+  *time_used = 0;
+  *memory_used = 0;
+  *score = 0.0;
+  for (line = strtok_r(result_file, "\n", &saveptr); line;
+      line = strtok_r(NULL, "\n", &saveptr))
+  {
+    char *equals = strchr(line, '=');
+    if (!equals)
+      continue;
+    *equals++ = '\0';
+    equals = trim_line(equals);
+    if (!strcmp(trim_line(line), "result"))
+      *result = strdup(equals);
+    else if (!strcmp(trim_line(line), "score"))
+      *score = strtod(equals, NULL);
+    else if (!strcmp(trim_line(line), "time_ms"))
+      *time_used = (unsigned)strtoul(equals, NULL, 10);
+    else if (!strcmp(trim_line(line), "memory_kb"))
+      *memory_used = (unsigned)strtoul(equals, NULL, 10);
+    else if (!strcmp(trim_line(line), "compiler_output_file"))
+    {
+      int size = 0;
+      *compiler_output = read_file(equals, &size);
+    }
+  }
+  free(result_file);
+  if (!*result)
+    *result = strdup("internal error: custom judge produced no result");
+  return 0;
+}
+
+static int
 run_isolate_cleanup(void)
 {
   pid_t pid = fork();
@@ -301,6 +434,16 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
     return -1;
   }
   strcat(box_path, "/box");
+
+  {
+    int custom_result = run_task_script(task_path, box_path, code, &task,
+        time_used, memory_used, score, result, compiler_output);
+    if (custom_result <= 0)
+    {
+      (void)run_isolate_cleanup();
+      return custom_result;
+    }
+  }
 
   if (0 != compile(code, box_path, task.memory_limit))
   {

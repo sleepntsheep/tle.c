@@ -197,10 +197,16 @@ read_tasks(void)
     task.max_score = max_score ? max_score->valuedouble : 100.0;
     {
       char asset_path[1024];
+      struct stat script_stat;
       if (strcmp(task.comparison, "special") == 0 &&
           access((snprintf(asset_path, sizeof asset_path, "%s/%s/jury.cpp", TASKS_PATH, task.name), asset_path), F_OK) != 0 &&
           access((snprintf(asset_path, sizeof asset_path, "%s/%s/jury", TASKS_PATH, task.name), asset_path), F_OK) != 0)
         die("special task %s has no jury.cpp or compiled jury", task.name);
+      snprintf(asset_path, sizeof asset_path, "%s/%s/script/judge", TASKS_PATH, task.name);
+      if (access(asset_path, F_OK) == 0 &&
+          (stat(asset_path, &script_stat) != 0 || !S_ISREG(script_stat.st_mode) ||
+           access(asset_path, X_OK) != 0))
+        die("task %s has a script/judge that is not a regular executable file", task.name);
       for (unsigned case_id = 1; case_id <= task.count_cases; ++case_id)
       {
         snprintf(asset_path, sizeof asset_path, "%s/%s/tests/%u.in", TASKS_PATH, task.name, case_id);
