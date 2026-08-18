@@ -23,6 +23,18 @@ write_submission_source(const char *box_path, const char *code)
   return 0;
 }
 
+static int
+write_text_path(const char *path, const char *text)
+{
+  FILE *fp = fopen(path, "w");
+  size_t length = strlen(text);
+  if (!fp)
+    return -1;
+  if (fwrite(text, 1, length, fp) != length || fclose(fp) != 0)
+    return -1;
+  return 0;
+}
+
 static char *
 trim_line(char *line)
 {
@@ -702,6 +714,21 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
   {
     warn("failed copying task files for %s", task.name);
     return -1;
+  }
+
+  if (!strcmp(task.comparison, "output_only"))
+  {
+    char answer_path[12000], output_path[600];
+    snprintf(answer_path, sizeof answer_path, "%s/tests/1.sol", task_path);
+    snprintf(output_path, sizeof output_path, "%s/1.out", box_path);
+    if (task.count_cases != 1 || write_text_path(output_path, code) != 0)
+      return -1;
+    *result = strdup(safe_tkcmp(answer_path, output_path) == 1 ? "accepted!" : "wa#1");
+    *score = !strcmp(*result, "accepted!") ? task.max_score : 0.0;
+    *time_used = 0;
+    *memory_used = 0;
+    (void)run_isolate_cleanup();
+    return 0;
   }
 
   {

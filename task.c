@@ -195,6 +195,8 @@ read_tasks(void)
     task.memory_limit = (unsigned)memory->valueint;
     task.count_cases = (unsigned)count_cases->valueint;
     task.max_score = max_score ? max_score->valuedouble : 100.0;
+    if (!strcmp(task.comparison, "output_only") && task.count_cases != 1)
+      die("output-only task %s must declare exactly one testcase", task.name);
     {
       char asset_path[1024];
       struct stat script_stat;
