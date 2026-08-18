@@ -18,7 +18,8 @@ sds view_task(sds out, const char *username, const struct task *task,
     const char *statement, int statement_pdf);
 sds view_statement(sds out, const char *username, const struct task *task, const char *markdown);
 sds view_pdf_statement(sds out, const char *username, const struct task *task);
-sds view_submit(sds out, const char *username, unsigned task_pk, const char *csrf);
+sds view_submit(sds out, const char *username, unsigned task_pk, const char *csrf,
+    int output_only);
 sds view_register(sds out, const char *username);
 sds view_login(sds out, const char *username);
 sds view_leaderboard(sds out, const char *username,

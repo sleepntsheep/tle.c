@@ -928,8 +928,10 @@ ahc_echo(void * cls,
         return MHD_NO;
       pk = strtoul(pk_, NULL, 10);
 
+      struct task submit_task;
       db_lock();
       int task_validity = check_task_pk_validity(pk);
+      int task_fetch = task_validity > 0 ? fetch_task_by_pk(pk, &submit_task) : -1;
       db_unlock();
       switch (task_validity)
       {
@@ -939,8 +941,11 @@ ahc_echo(void * cls,
           return response_internal_server_error(connection);
       }
 
+      if (task_fetch != 0)
+        return response_internal_server_error(connection);
       html = view_submit(sdsempty(), username, pk,
-          session_authenticated ? csrf_token : NULL);
+          session_authenticated ? csrf_token : NULL,
+          !strcmp(submit_task.comparison, "output_only"));
     }
     else if (0 == strcmp(page, "register"))
     {
