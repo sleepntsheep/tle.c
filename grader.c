@@ -33,6 +33,77 @@ trim_line(char *line)
   return line;
 }
 
+/* Return 1 when no hook exists, 0 on success, 2 on compilation failure. */
+static int
+run_task_compile_script(const char *task_path, const char *box_path,
+    const char *code, const struct task *task, char **compiler_output)
+{
+  char script_path[1200], diagnostic_path[600];
+  pid_t pid;
+  int status, elapsed = 0;
+
+  snprintf(script_path, sizeof script_path, "%s/script/compile", task_path);
+  if (access(script_path, X_OK) != 0)
+    return 1;
+  if (write_submission_source(box_path, code) != 0)
+    return -1;
+  snprintf(diagnostic_path, sizeof diagnostic_path, "%s/compile.err", box_path);
+  unlink(diagnostic_path);
+
+  pid = fork();
+  if (pid < 0)
+    return -1;
+  if (pid == 0)
+  {
+    char limit[32];
+    if (chdir(box_path) != 0)
+      _exit(127);
+    setenv("TASK_HOME", task_path, 1);
+    setenv("WORK_DIR", box_path, 1);
+    setenv("SUBMISSION", "./submission.cpp", 1);
+    setenv("EXECUTABLE", "./exec", 1);
+    setenv("COMPILER_OUTPUT", "./compile.err", 1);
+    snprintf(limit, sizeof limit, "%u", task->memory_limit);
+    setenv("MEMORY_LIMIT", limit, 1);
+    snprintf(limit, sizeof limit, "%u", task->time_limit);
+    setenv("TIME_LIMIT", limit, 1);
+    execl("/bin/sh", "sh", script_path, NULL);
+    _exit(127);
+  }
+  for (;;)
+  {
+    pid_t waited = waitpid(pid, &status, WNOHANG);
+    if (waited == pid)
+      break;
+    if (waited < 0)
+      return -1;
+    if (elapsed++ >= 300)
+    {
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      return -1;
+    }
+    usleep(100000);
+  }
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+  {
+    int size = 0;
+    *compiler_output = read_file(diagnostic_path, &size);
+    return 2;
+  }
+  {
+    char executable_path[600];
+    snprintf(executable_path, sizeof executable_path, "%s/exec", box_path);
+    if (access(executable_path, X_OK) != 0)
+    {
+      int size = 0;
+      *compiler_output = read_file(diagnostic_path, &size);
+      return 2;
+    }
+  }
+  return 0;
+}
+
 /*
  * Run a trusted task-provided judge script.
  *
@@ -445,22 +516,38 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
     }
   }
 
-  if (0 != compile(code, box_path, task.memory_limit))
   {
-    char diagnostic_path[600];
-    int diagnostic_size = 0;
-    char *diagnostic;
-
-    snprintf(diagnostic_path, sizeof diagnostic_path, "%s/compile.err", box_path);
-    diagnostic = read_file(diagnostic_path, &diagnostic_size);
-    if (diagnostic)
-      *compiler_output = diagnostic;
-    free(*result);
-    *result = strdup("compilation error");
-    *score = 0.0;
-    *time_used = 0;
-    *memory_used = 0;
-    return 0;
+    int compile_status = run_task_compile_script(task_path, box_path, code,
+        &task, compiler_output);
+    if (compile_status < 0)
+      return -1;
+    if (compile_status == 2)
+    {
+      free(*result);
+      *result = strdup("compilation error");
+      *score = 0.0;
+      *time_used = 0;
+      *memory_used = 0;
+      return 0;
+    }
+    if (compile_status == 1 && 0 != compile(code, box_path, task.memory_limit))
+      compile_status = 2;
+    if (compile_status == 2)
+    {
+      char diagnostic_path[600];
+      int diagnostic_size = 0;
+      char *diagnostic;
+      snprintf(diagnostic_path, sizeof diagnostic_path, "%s/compile.err", box_path);
+      diagnostic = read_file(diagnostic_path, &diagnostic_size);
+      if (diagnostic)
+        *compiler_output = diagnostic;
+      free(*result);
+      *result = strdup("compilation error");
+      *score = 0.0;
+      *time_used = 0;
+      *memory_used = 0;
+      return 0;
+    }
   }
 
   unsigned max_time = 0, max_mem = 0;

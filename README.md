@@ -42,6 +42,12 @@ memory_kb=2048
 compiler_output_file=/path/to/compiler.err
 ```
 
+Tasks may instead provide an executable `script/compile` to replace only the
+built-in compilation step. It receives the same task/workspace variables plus
+`EXECUTABLE=./exec` and `COMPILER_OUTPUT=./compile.err`; it must create an
+executable at `EXECUTABLE` on success. The normal isolated execution and
+comparison path then continues unchanged.
+
 This provides a stable extension point for multi-file, output-only,
 communication, and interactive tasks while ordinary tasks continue using the
 built-in evaluator. Task scripts are trusted grading code and must never be
