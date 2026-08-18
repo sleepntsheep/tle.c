@@ -91,6 +91,19 @@ score_for_failed_case(unsigned task_pk, unsigned failed_case, double max_score)
   return score > max_score ? max_score : score;
 }
 
+static int
+has_subtask_groups(unsigned task_pk)
+{
+  struct subtask_group *groups = NULL;
+  size_t count = 0;
+  int has_groups;
+  if (fetch_subtask_groups(task_pk, &groups, &count) != 0)
+    return 0;
+  has_groups = count != 0;
+  free_subtask_groups(groups);
+  return has_groups;
+}
+
 /* variables */
 struct task task;
 
@@ -310,6 +323,9 @@ grade(unsigned task_pk, const char *code, unsigned *time_used, unsigned *memory_
   unsigned max_time = 0, max_mem = 0;
   double total_score = 0.0;
   sds raw_results = NULL;
+  sds first_failure = NULL;
+  unsigned passed_cases = 0;
+  int uniform_scoring = !has_subtask_groups(task_pk);
 
   for (unsigned case_id = 1; case_id <= task.count_cases; ++case_id)
   {
@@ -552,10 +568,22 @@ end_case:
       fclose(stat_fp);
 
     if (raw_results)
-      break;
+    {
+      if (!uniform_scoring)
+        break;
+      if (!first_failure)
+        first_failure = sdsdup(raw_results);
+      sdsfree(raw_results);
+      raw_results = NULL;
+    }
+    else
+      ++passed_cases;
   }
 
   (void)run_isolate_cleanup();
+
+  if (first_failure)
+    raw_results = first_failure;
 
   if (!raw_results)
   {
@@ -564,6 +592,10 @@ end_case:
   }
   else
   {
+    if (uniform_scoring)
+      total_score = task.count_cases ? task.max_score * (double)passed_cases / task.count_cases : 0.0;
+    else
+    {
     unsigned failed_case = 0;
     if (sscanf(raw_results, "wa#%u", &failed_case) != 1 &&
         sscanf(raw_results, "time limit exceeded#%u", &failed_case) != 1 &&
@@ -573,6 +605,7 @@ end_case:
       failed_case = 0;
     if (failed_case)
       total_score = score_for_failed_case(task_pk, failed_case, task.max_score);
+    }
   }
 
   *time_used = max_time;
