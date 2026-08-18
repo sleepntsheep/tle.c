@@ -178,8 +178,8 @@ view_task(sds out, const char *username, const struct task *task,
     const char *statement, int statement_pdf)
 {
   out = begin(out, username, "task");
-  out = sdscat(out, "<h1>Task "); out = sdscatprintf(out, "%u", task->pk);
-  out = sdscat(out, "</h1><p>"); out = html_escape_text(out, task->name);
+  out = sdscat(out, "<h1>"); out = html_escape_text(out, task->name);
+  out = sdscat(out, "</h1><p>");
   out = sdscat(out, "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css\">");
   out = sdscatprintf(out, " (%u kilobytes, %u milliseconds)</p>"
       "<p>Submissions: %u · Accepted: %u</p>"
@@ -205,7 +205,7 @@ view_statement(sds out, const char *username, const struct task *task, const cha
 {
   out = begin(out, username, "task statement");
   out = sdscat(out, "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css\">");
-  out = sdscatprintf(out, "<h1>Task %u: ", task->pk);
+  out = sdscat(out, "<h1>");
   out = html_escape_text(out, task->name);
   out = sdscat(out, "</h1><article class=\"statement\">");
   out = html_markdown(out, markdown);
@@ -219,19 +219,19 @@ sds
 view_pdf_statement(sds out, const char *username, const struct task *task)
 {
   out = begin(out, username, "task statement");
-  out = sdscatprintf(out, "<h1>Task %u: ", task->pk);
+  out = sdscat(out, "<h1>");
   out = html_escape_text(out, task->name);
   out = sdscatprintf(out, "</h1><iframe class=\"statement-frame\" title=\"Task statement\" src=\"?page=desc_file&amp;pk=%u\"></iframe>", task->pk);
   return end(out);
 }
 
 sds
-view_submit(sds out, const char *username, unsigned task_pk, const char *csrf,
+view_submit(sds out, const char *username, const char *task_name, unsigned task_pk, const char *csrf,
     int output_only)
 {
   out = begin(out, username, "submit");
   out = sdscatprintf(out,
-      "<h1>Submit task %u</h1><p>%s must not be longer than %u bytes.</p>"
+      "<h1>Submit %s</h1><p>%s must not be longer than %u bytes.</p>"
       "<form action=\"?page=submit&amp;pk=%u\" method=\"post\" enctype=\"multipart/form-data\">"
       "<input type=\"hidden\" name=\"task_pk\" value=\"%u\"><input type=\"hidden\" name=\"csrf\" value=\"%s\">"
       "<label>%s <textarea name=\"code\" rows=\"5\" cols=\"80\"></textarea></label>"
@@ -240,7 +240,7 @@ view_submit(sds out, const char *username, unsigned task_pk, const char *csrf,
       "<label><input type=\"checkbox\" name=\"is_public\" checked> Make code public</label>"
       "<label><input type=\"checkbox\" name=\"is_anonymous\"> Submit anonymously</label>"
       "<button type=\"submit\">Upload</button></form>",
-      task_pk, output_only ? "The output" : "The code", MAX_CODE_BYTES,
+      task_name ? task_name : "task", output_only ? "The output" : "The code", MAX_CODE_BYTES,
       task_pk, task_pk, csrf ? csrf : "", output_only ? "Paste output" : "Paste code");
   return end(out);
 }

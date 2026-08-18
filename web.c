@@ -917,7 +917,7 @@ ahc_echo(void * cls,
 
       if (task_fetch != 0)
         return response_internal_server_error(connection);
-      html = view_submit(sdsempty(), username, pk,
+      html = view_submit(sdsempty(), username, submit_task.name, pk,
           session_authenticated ? csrf_token : NULL,
           !strcmp(submit_task.comparison, "output_only"));
     }
